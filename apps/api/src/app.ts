@@ -155,6 +155,10 @@ export async function createApp(
       status: 'ok',
       storage: store.db ? 'postgresql' : 'local-file',
       model: MODEL_VERSION,
+      frontend: existsSync(
+        path.join(path.resolve(process.env.WEB_DIST_DIR || 'apps/web/dist'), 'index.html'),
+      ),
+      revision: process.env.RENDER_GIT_COMMIT?.slice(0, 7) || null,
     }),
   );
   app.get('/api/crops', (_, res) => res.json({ crops: Object.values(CROPS), soils: SOILS }));
@@ -656,8 +660,8 @@ export async function createApp(
         '<!doctype html><title>AgriTwin API</title><h1>AgriTwin API</h1><p>OpenAPI 3.1 definition: <a href="/api/openapi.json">Download specification</a></p><p>Cookie authentication and matching Origin header are required for mutations. See docs/API.md in the project.</p>',
       ),
   );
-  if (prod) {
-    const webDist = path.resolve(process.env.WEB_DIST_DIR || 'apps/web/dist');
+  const webDist = path.resolve(process.env.WEB_DIST_DIR || 'apps/web/dist');
+  if (prod || process.env.WEB_DIST_DIR) {
     if (existsSync(path.join(webDist, 'index.html'))) {
       app.use(express.static(webDist, { index: false, maxAge: '1h' }));
       app.get('*splat', (req, res, next) => {

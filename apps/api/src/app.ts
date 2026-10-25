@@ -77,7 +77,9 @@ export async function createApp(
             'https://www.googleapis.com',
             'https://firebaseinstallations.googleapis.com',
             'https://accounts.google.com/gsi/',
+            'https://photon.komoot.io',
           ],
+          'img-src': ["'self'", 'data:', 'https://tile.openstreetmap.org'],
           'frame-src': [
             "'self'",
             'https://agridigitwin.firebaseapp.com',

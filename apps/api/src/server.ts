@@ -1,5 +1,6 @@
 import dotenv from 'dotenv';
 import fs from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomBytes } from 'node:crypto';
@@ -19,13 +20,30 @@ if (!process.env.JWT_SECRET) {
     await fs.writeFile('data/session-secret', process.env.JWT_SECRET, { mode: 0o600 });
   }
 }
-if (!process.env.WEB_ORIGIN && process.env.RENDER_EXTERNAL_HOSTNAME)
-  process.env.WEB_ORIGIN = `https://${process.env.RENDER_EXTERNAL_HOSTNAME}`;
-if (!process.env.WEB_DIST_DIR)
-  process.env.WEB_DIST_DIR = path.resolve(
-    path.dirname(fileURLToPath(import.meta.url)),
-    '../../web/dist',
-  );
+const renderUrl =
+  process.env.RENDER_EXTERNAL_URL ||
+  (process.env.RENDER_EXTERNAL_HOSTNAME
+    ? `https://${process.env.RENDER_EXTERNAL_HOSTNAME}`
+    : undefined);
+const configuredOrigin = process.env.WEB_ORIGIN;
+if (
+  renderUrl &&
+  (!configuredOrigin || /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(configuredOrigin))
+)
+  process.env.WEB_ORIGIN = renderUrl;
+
+const here = path.dirname(fileURLToPath(import.meta.url));
+const webDistCandidates = [
+  process.env.WEB_DIST_DIR,
+  path.resolve(here, '../../web/dist'),
+  path.resolve(process.cwd(), 'apps/web/dist'),
+  path.resolve(process.cwd(), '../web/dist'),
+].filter((candidate): candidate is string => Boolean(candidate));
+const webDistDir = webDistCandidates.find((candidate) =>
+  existsSync(path.join(candidate, 'index.html')),
+);
+if (webDistDir) process.env.WEB_DIST_DIR = webDistDir;
+else log.error({ candidates: webDistCandidates }, 'Built web app was not found');
 const service = await createApp();
 service.server.listen(Number(process.env.PORT || 4000), '0.0.0.0', () =>
   log.info(

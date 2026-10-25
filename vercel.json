@@ -1,0 +1,1 @@
+{"buildCommand":"npm run build -w @agritwin/web","outputDirectory":"apps/web/dist","installCommand":"npm ci","framework":"vite","rewrites":[{"source":"/((?!assets/).*)","destination":"/index.html"}]}

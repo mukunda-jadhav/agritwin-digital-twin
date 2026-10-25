@@ -1,0 +1,30 @@
+{
+  "name": "agritwin",
+  "private": true,
+  "version": "1.0.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -k -n API,WEB -c green,cyan \"npm run dev -w @agritwin/api\" \"npm run dev -w @agritwin/web\"",
+    "build": "npm run build -w @agritwin/web && npm run build -w @agritwin/api",
+    "test": "npm run test -w @agritwin/api && npm run test -w @agritwin/web",
+    "db:generate": "npm run db:generate -w @agritwin/api",
+    "db:deploy": "npm run db:deploy -w @agritwin/api",
+    "test:e2e": "playwright test",
+    "format": "prettier --write apps/**/*.{ts,tsx,css,json} packages/**/*.ts"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.64.1",
+    "concurrently": "^9.2.1",
+    "prettier": "^3.9.10",
+    "typescript": "^5.9.3"
+  },
+  "engines": {
+    "node": ">=22.12"
+  },
+  "overrides": {
+    "esbuild": "0.28.2"
+  }
+}

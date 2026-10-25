@@ -1,0 +1,154 @@
+generator client {
+  provider = "prisma-client-js"
+}
+datasource db {
+  provider = "postgresql"
+}
+model User {
+  id String @id
+  email String @unique
+  name String
+  passwordHash String
+  sessionVersion Int @default(0)
+  firebaseUid String? @unique
+  createdAt DateTime @default(now())
+  farms Farm[]
+}
+model Farm {
+  id String @id
+  ownerId String
+  owner User @relation(fields:[ownerId], references:[id], onDelete:Cascade)
+  name String
+  location String
+  latitude Float
+  longitude Float
+  area Float
+  unit String
+  boundary Json?
+  economics Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  plots Plot[]
+  runs SimulationRun[]
+  scenarios Scenario[]
+  @@index([ownerId])
+}
+model Plot {
+  id String @id
+  farmId String
+  farm Farm @relation(fields:[farmId],references:[id],onDelete:Cascade)
+  name String
+  area Float
+  soil String
+  method String
+  plantingDate String
+  crop String @default("Tomato")
+  planting Planting?
+  states PlotState[]
+  irrigation IrrigationEvent[]
+  harvests HarvestEvent[]
+  @@index([farmId])
+}
+model Crop {
+  id String @id
+  name String
+  parameters Json
+  plantings Planting[]
+}
+model Planting {
+  id String @id
+  plotId String @unique
+  plot Plot @relation(fields:[plotId],references:[id],onDelete:Cascade)
+  cropId String
+  crop Crop @relation(fields:[cropId],references:[id])
+  plantingDate String
+}
+model SimulationRun {
+  id String @id
+  farmId String
+  farm Farm @relation(fields:[farmId],references:[id],onDelete:Cascade)
+  modelVersion String
+  status String
+  speed Int
+  version Int
+  active Boolean @default(true)
+  createdAt DateTime @default(now())
+  snapshots SimulationSnapshot[]
+  weather WeatherRecord[]
+  events IrrigationEvent[]
+  predictions Prediction[]
+  harvests HarvestEvent[]
+  @@index([farmId,active])
+}
+model SimulationSnapshot {
+  id String @id
+  runId String
+  run SimulationRun @relation(fields:[runId],references:[id],onDelete:Cascade)
+  date String
+  day Int
+  version Int
+  weather Json?
+  states PlotState[]
+  @@unique([runId,version])
+}
+model PlotState {
+  id String @id @default(cuid())
+  snapshotId String
+  snapshot SimulationSnapshot @relation(fields:[snapshotId],references:[id],onDelete:Cascade)
+  plotId String
+  plot Plot @relation(fields:[plotId],references:[id],onDelete:Cascade)
+  data Json
+  @@unique([snapshotId,plotId])
+}
+model WeatherRecord {
+  id String @id @default(cuid())
+  runId String
+  run SimulationRun @relation(fields:[runId],references:[id],onDelete:Cascade)
+  date String
+  source String
+  data Json
+  createdAt DateTime @default(now())
+  @@unique([runId,date])
+}
+model IrrigationEvent {
+  id String @id
+  runId String
+  run SimulationRun @relation(fields:[runId],references:[id],onDelete:Cascade)
+  plotId String
+  plot Plot @relation(fields:[plotId],references:[id],onDelete:Cascade)
+  date String
+  amount Float
+  interval Int
+  enabled Boolean
+  appliedDates String[]
+  kind String
+  @@index([runId,date])
+}
+model Prediction {
+  id String @id @default(cuid())
+  runId String
+  run SimulationRun @relation(fields:[runId],references:[id],onDelete:Cascade)
+  version Int
+  data Json
+  @@unique([runId,version])
+}
+model Scenario {
+  id String @id
+  farmId String
+  farm Farm @relation(fields:[farmId],references:[id],onDelete:Cascade)
+  createdAt DateTime @default(now())
+  config Json
+  baseline Json
+  experiment Json
+  @@index([farmId])
+}
+model HarvestEvent {
+  id String @id
+  runId String
+  run SimulationRun @relation(fields:[runId],references:[id],onDelete:Cascade)
+  plotId String
+  plot Plot @relation(fields:[plotId],references:[id],onDelete:Cascade)
+  date String
+  kg Float
+  @@index([runId,date])
+}

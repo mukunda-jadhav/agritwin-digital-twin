@@ -1,0 +1,617 @@
+# MASTER PROMPT — AI-Powered Smart Farm Digital Twin
+
+## Your Role
+
+Act as a senior full-stack software architect, expert React and Three.js developer, Node.js backend engineer, agricultural simulation specialist, and machine learning engineer.
+
+Build a complete, production-quality, full-stack web application called **AgriTwin — AI-Powered Smart Farm Digital Twin**.
+
+This is a final-year BTech Computer Science Engineering project. The application must be visually impressive, technically sound, interactive, modular, and suitable for a live college project demonstration.
+
+Do not build a simple farming dashboard or static 3D model. Build an actual working software-based digital twin where simulated farm conditions evolve over time based on weather, irrigation, soil properties, and crop growth.
+
+## 1. Mandatory Technology Stack
+
+### Frontend
+- React with Vite and TypeScript
+- Three.js with React Three Fiber and Drei
+- Tailwind CSS
+- shadcn/ui
+- Recharts
+- Zustand for application state
+- React Router
+- Axios or Fetch API
+- Socket.IO Client
+- Lucide React icons
+
+### Backend
+- Node.js with TypeScript
+- Express.js
+- Socket.IO
+- Prisma ORM
+- Zod for request validation
+- JWT authentication with secure HTTP-only cookies
+
+### Database
+- PostgreSQL
+- Neon serverless PostgreSQL for hosted database
+- Prisma migrations and schema management
+- Use environment variables for database credentials
+
+### AI and Machine Learning
+- TensorFlow.js running in Node.js
+- JavaScript/TypeScript mathematical simulation models
+- ML models for irrigation recommendation, crop stress, and yield estimation
+- Proper training, evaluation, model persistence, and inference
+- Do not use Python or FastAPI
+
+### External API
+- Open-Meteo API for weather forecasts and historical weather data
+- Use available temperature, precipitation, humidity, solar radiation, and evapotranspiration data where supported
+- Handle missing data, API failures, and caching
+
+### Deployment
+- Frontend: Vercel
+- Backend: Render or another Node.js hosting provider supporting persistent WebSocket connections
+- Database: Neon PostgreSQL
+
+## 2. Main Objective
+
+Allow a user to create a virtual farm, configure its properties, visualize it in 3D, simulate farming conditions, receive AI-powered recommendations, and test agricultural decisions without any physical hardware.
+
+The application must support:
+
+1. Virtual farm creation
+2. Interactive 3D visualization
+3. Real-world weather integration
+4. Soil moisture simulation
+5. Crop growth simulation
+6. Virtual irrigation management
+7. AI-based agricultural predictions
+8. Yield estimation
+9. Crop stress monitoring
+10. Real-time updates
+11. Historical analytics
+12. What-if scenario simulations
+
+**Important:** The entire project must be software-only. No IoT devices, sensors, Arduino, ESP32, or physical equipment.
+
+## 3. User Authentication and Farm Management
+
+Implement:
+
+- User registration and login
+- Secure authentication and protected routes
+- User dashboard
+- Create, edit, and delete farms
+- Multiple farms per user
+- Multiple plots per farm
+- Farm location selection
+- Farm area and measurement units
+- Soil type selection
+- Crop selection and planting dates
+- Irrigation method selection
+
+Each farm should have a configurable virtual environment.
+
+Start with tomato cultivation as the fully implemented reference crop. Architect the system so additional crops can be added through crop-specific configuration and validated parameters.
+
+## 4. Interactive 3D Digital Farm
+
+Use React Three Fiber and Drei to create an attractive, interactive 3D agricultural environment.
+
+Include:
+
+- Farm terrain
+- Agricultural plots
+- Crop rows and plants
+- Soil visualization
+- Irrigation pipes or sprinklers
+- Farm boundaries
+- Environmental lighting
+- Camera orbit, zoom, and pan
+- Plot selection by clicking
+- Crop growth animations
+- Visual indicators for dry or healthy soil
+- Plant appearance changing with growth stage and stress
+- Weather effects such as rain
+- Day/night lighting where practical
+
+The 3D scene must reflect the actual simulation state, not independently generated random visual changes.
+
+Clicking a plot should show its crop, soil moisture, growth stage, water stress, irrigation history, and estimated yield.
+
+Optimize rendering using instancing, reusable geometry, appropriate detail levels, and careful React state management.
+
+## 5. Agricultural Simulation Engine
+
+Build a dedicated deterministic simulation engine in TypeScript.
+
+The simulation should advance using a virtual clock independent of actual wall-clock time.
+
+Support:
+
+- Pause
+- Resume
+- Advance one day
+- Simulate multiple days
+- Change simulation speed
+- Reset
+- Save simulation snapshots
+- Replay historical simulation states
+
+### Soil Moisture Simulation
+
+Use a documented water-balance model based on:
+
+- Initial soil moisture
+- Rainfall
+- Irrigation
+- Evapotranspiration
+- Soil water-holding capacity
+- Drainage
+- Crop water requirements
+
+Maintain consistent units, such as millimeters of water per plot or millimeters of root-zone water depth.
+
+A simplified conceptual relationship is:
+
+New soil water = Previous soil water + Effective rainfall + Irrigation − Crop evapotranspiration − Drainage
+
+Clamp values to physically valid soil-water limits.
+
+Clearly document assumptions and limitations.
+
+### Crop Growth Simulation
+
+Use a simplified crop-growth model considering:
+
+- Growing Degree Days
+- Crop age
+- Temperature
+- Soil water availability
+- Growth stages
+- Water stress
+
+Growth stages should include:
+
+- Germination
+- Vegetative growth
+- Flowering
+- Fruit development
+- Maturity
+- Harvest
+
+Use research-supported parameters for the initial tomato crop where available.
+
+Do not claim that the simulation accurately predicts real farm outcomes without validation.
+
+## 6. Open-Meteo Weather Integration
+
+Integrate Open-Meteo through the Express backend.
+
+Features:
+
+- Fetch weather using farm coordinates
+- Display current weather and forecast
+- Retrieve historical weather when needed
+- Cache responses
+- Store weather snapshots used by simulations
+- Use actual weather data as inputs to the farm simulation
+- Provide fallback sample weather data for offline demonstrations
+
+Distinguish observed historical weather, forecast weather, and synthetic future weather.
+
+For simulations extending beyond the available forecast horizon, use explicitly labeled synthetic weather scenarios rather than pretending actual forecasts exist.
+
+Ensure the application can reproduce previous simulations using the same saved weather inputs.
+
+## 7. AI and Machine Learning with TensorFlow.js
+
+Create a separate ML module inside the Node.js application.
+
+### Model A — Irrigation Recommendation
+
+Inputs may include:
+
+- Soil moisture
+- Soil type
+- Crop growth stage
+- Temperature
+- Forecast rainfall
+- Estimated evapotranspiration
+- Recent irrigation history
+
+Output:
+
+- Whether irrigation is recommended
+- Suggested water amount
+- Estimated timing
+
+Start with a deterministic agronomic baseline, then develop a TensorFlow.js model using suitable labeled data.
+
+### Model B — Crop Stress Prediction
+
+Inputs:
+
+- Soil moisture
+- Temperature
+- Crop stage
+- Water deficit
+- Recent weather
+
+Outputs:
+
+- Low stress
+- Moderate stress
+- High stress
+
+### Model C — Yield Estimation
+
+Inputs:
+
+- Crop growth progress
+- Accumulated temperature
+- Water stress history
+- Weather conditions
+- Crop-specific parameters
+
+Output:
+
+- Estimated yield
+- Prediction range where justified
+- Factors affecting the prediction
+
+Use appropriate public agricultural datasets where available.
+
+Create separate scripts for training and evaluation. Record dataset provenance, preprocessing, train/test splits, evaluation metrics, and limitations.
+
+Avoid training and evaluating on the same simulated records or leaking future information into training features.
+
+If credible training data is unavailable, implement and label a transparent simulation-based baseline instead of inventing ML accuracy.
+
+Persist trained models and load them for backend inference. Keep training outside normal HTTP request processing.
+
+## 8. Smart Irrigation System
+
+Build a virtual irrigation system.
+
+Users should be able to:
+
+- Turn virtual irrigation on or off
+- Select a plot
+- Apply a specified amount of water
+- Schedule irrigation
+- View water consumption
+- See AI recommendations
+- Compare water usage between scenarios
+
+Applying irrigation must update the simulation's water balance, persist the event, and broadcast the resulting state.
+
+## 9. What-If Scenario Simulator
+
+This is one of the most important features.
+
+Allow users to test questions such as:
+
+- What if I stop irrigation for seven days?
+- What if rainfall decreases by 30%?
+- What if I irrigate every two days?
+- What if the temperature rises by 4°C?
+- What if I reduce water usage by 25%?
+
+Users should be able to clone the current farm simulation state, modify parameters, and compare results.
+
+Compare:
+
+- Soil moisture
+- Crop stress
+- Growth progress
+- Water consumption
+- Estimated yield
+
+Ensure scenario comparisons use the same starting conditions and weather inputs unless the scenario intentionally changes weather.
+
+Display side-by-side charts and summary metrics.
+
+Never overwrite the original simulation when running an experiment.
+
+## 10. Real-Time Updates with Socket.IO
+
+Use Socket.IO for simulation events.
+
+Suggested events:
+
+- simulation:started
+- simulation:paused
+- simulation:ticked
+- farm:state-updated
+- irrigation:applied
+- crop:growth-updated
+- prediction:updated
+- simulation:completed
+
+The backend must remain authoritative for simulation state.
+
+The frontend should receive synchronized updates without independently calculating authoritative farm values.
+
+Use authenticated farm-specific Socket.IO rooms.
+
+Support reconnecting clients by fetching the latest authoritative state.
+
+## 11. Dashboard and Analytics
+
+Create a modern dashboard with:
+
+- Farm overview
+- Current simulation date
+- Weather information
+- Soil moisture indicators
+- Crop growth status
+- Water consumption
+- Crop stress indicators
+- Yield estimates
+- AI recommendations
+- Interactive charts
+- Irrigation history
+- Simulation controls
+- Scenario comparison
+
+Use Recharts for time-series charts.
+
+Display units and clearly label observed, simulated, and predicted values.
+
+## 12. Database Architecture
+
+Design a normalized Prisma schema containing:
+
+- User
+- Farm
+- Plot
+- Crop
+- Planting
+- WeatherRecord
+- SimulationRun
+- SimulationSnapshot
+- PlotState
+- IrrigationEvent
+- Prediction
+- Scenario
+
+Use foreign keys, indexes, timestamps, and appropriate constraints.
+
+Store farm ownership and ensure users cannot access another user's data.
+
+Use database transactions where multiple related simulation updates must be persisted atomically.
+
+Avoid saving unnecessary high-frequency duplicates. Store periodic snapshots and meaningful events for efficient replay and analytics.
+
+## 13. UI/UX Design
+
+Create a premium-looking agricultural technology application.
+
+Design direction:
+
+- Modern SaaS dashboard
+- Professional green and neutral color palette
+- Clean typography
+- Responsive layouts
+- Smooth but restrained animations
+- Clear data visualization
+- Accessible controls
+- Consistent spacing and reusable components
+
+Main pages:
+
+1. Landing Page
+2. Login / Registration
+3. Dashboard
+4. My Farms
+5. Create Farm
+6. 3D Digital Twin
+7. Farm Analytics
+8. Irrigation Management
+9. AI Insights
+10. Scenario Simulator
+11. Farm Settings
+
+The 3D farm should be the main visual attraction, but usability and accurate simulation behavior take priority over decoration.
+
+## 14. Backend API Design
+
+Create REST endpoints for:
+
+- Authentication
+- Farm CRUD
+- Plot CRUD
+- Crop configuration
+- Weather retrieval
+- Simulation creation and control
+- Simulation state
+- Irrigation events
+- AI predictions
+- Analytics
+- Scenario creation and comparison
+
+Implement:
+
+- Zod validation
+- Centralized error handling
+- Authentication and authorization
+- Structured logging
+- Rate limiting where appropriate
+- Secure CORS configuration
+- Environment-based configuration
+- Health-check endpoint
+
+Document APIs with OpenAPI/Swagger.
+
+## 15. Codebase Structure
+
+Use a monorepo:
+
+```text
+agritwin/
+├── apps/
+│   ├── web/
+│   │   └── src/
+│   │       ├── components/
+│   │       ├── pages/
+│   │       ├── farm3d/
+│   │       ├── hooks/
+│   │       ├── stores/
+│   │       └── services/
+│   │
+│   └── api/
+│       ├── src/
+│       │   ├── modules/
+│       │   ├── routes/
+│       │   ├── services/
+│       │   ├── simulation/
+│       │   ├── ml/
+│       │   ├── sockets/
+│       │   └── jobs/
+│       └── prisma/
+│
+├── packages/
+│   └── shared/
+│       ├── types/
+│       └── schemas/
+│
+├── datasets/
+├── docs/
+├── .env.example
+└── README.md
+```
+
+## 16. Development Phases
+
+Implement incrementally.
+
+**Phase 1 — Foundation**
+- Monorepo setup
+- Frontend and backend configuration
+- Neon PostgreSQL and Prisma
+- Authentication
+- Farm and plot CRUD
+
+**Phase 2 — 3D Farm**
+- Interactive terrain
+- Farm plots
+- Tomato crop models
+- Camera controls
+- Plot selection
+
+**Phase 3 — Simulation**
+- Virtual clock
+- Soil water balance
+- Crop growth model
+- Simulation state persistence
+- Socket.IO synchronization
+
+**Phase 4 — Weather**
+- Open-Meteo integration
+- Weather caching
+- Historical weather playback
+- Forecast-based simulations
+
+**Phase 5 — AI**
+- Dataset preparation
+- Baseline prediction models
+- TensorFlow.js training
+- Model evaluation
+- Prediction APIs
+
+**Phase 6 — Advanced Features**
+- Irrigation scheduling
+- Crop stress visualization
+- Yield estimates
+- Scenario comparison
+- Historical analytics
+
+**Phase 7 — Finalization**
+- Automated testing
+- Performance optimization
+- Security checks
+- Deployment
+- Documentation
+- Demonstration preparation
+
+## 17. Testing and Quality Requirements
+
+Include:
+
+- Unit tests for simulation calculations
+- Tests for water-balance conservation and valid boundaries
+- Tests for deterministic simulation replay
+- API integration tests
+- Database access-control tests
+- Socket.IO synchronization tests
+- Frontend component tests
+- End-to-end tests for major user workflows
+- ML evaluation using held-out data
+- Basic performance testing for the 3D farm
+
+Provide realistic seed data for demonstration.
+
+Do not fabricate agricultural measurements, model evaluation scores, or test results.
+
+## 18. Final Demonstration Requirements
+
+The completed application must demonstrate this scenario:
+
+1. A user registers and creates a farm.
+2. The user selects a tomato crop.
+3. A 3D farm appears.
+4. The application loads weather information.
+5. The user starts the simulation.
+6. Simulated days pass and crops grow.
+7. Soil moisture decreases without sufficient rainfall.
+8. The system identifies water stress.
+9. AI recommends irrigation.
+10. The user applies virtual irrigation.
+11. Soil moisture and crop conditions update.
+12. The user creates a second scenario with reduced irrigation.
+13. The application compares water consumption, stress, and estimated yield.
+14. The user reviews the results through charts and the 3D visualization.
+
+All demonstrated values must be produced by actual implemented calculations or trained models, not hardcoded animations or fake dashboard numbers.
+
+## 19. Instructions for Generating the Project
+
+Follow these rules:
+
+1. First explain the architecture, modules, data flow, and development plan.
+2. Identify technical risks and necessary modeling assumptions.
+3. Then implement the project phase by phase.
+4. Provide complete, runnable code with actual file paths.
+5. Do not generate placeholder business logic and describe it as complete.
+6. Do not skip configuration, dependencies, database migrations, or error handling.
+7. Keep code modular, strongly typed, readable, and maintainable.
+8. Use current compatible stable library versions.
+9. Explain how to run and test each completed phase.
+10. Verify each phase before moving to the next.
+11. Prioritize a working simulation over unnecessary complexity.
+12. Never add Python, FastAPI, IoT hardware, or unrelated technologies.
+13. Ask questions only when a decision is essential; otherwise make sensible engineering choices and explain them.
+
+## 20. Expected Final Deliverable
+
+A fully functional, deployable AI-powered Agricultural Digital Twin web application with:
+
+- React and Three.js frontend
+- Node.js and Express backend
+- Socket.IO real-time synchronization
+- Neon PostgreSQL database
+- TensorFlow.js machine learning
+- Open-Meteo weather integration
+- Functional agricultural simulation
+- Interactive 3D farm
+- Smart irrigation
+- Crop growth and stress simulation
+- Yield estimation
+- What-if scenario comparisons
+- Analytics dashboard
+- Tests and documentation
+
+**Start by designing the detailed system architecture, database relationships, simulation-engine design, and implementation roadmap. Do not immediately generate the entire application in one response.**

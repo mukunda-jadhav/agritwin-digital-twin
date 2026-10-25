@@ -1,0 +1,1 @@
+ALTER TABLE "Farm" DROP COLUMN "dataMode";

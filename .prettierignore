@@ -1,0 +1,9 @@
+node_modules
+dist
+data
+models
+package-lock.json
+prisma/migrations
+work
+test-results
+playwright-report

@@ -1,0 +1,53 @@
+import { test, expect } from '@playwright/test';
+test('demo farm: simulate, irrigate, compare scenarios and replay', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Explore a demo' }).click();
+  await expect(
+    page.getByRole('heading', { name: 'A little insight. A better harvest.' }),
+  ).toBeVisible();
+  await page.getByRole('button', { name: '+7 days' }).click();
+  await expect(page.getByText('Day 7 · live state')).toBeVisible();
+  await expect(page.locator('canvas')).toBeVisible();
+  await page.screenshot({ path: 'work/dashboard-desktop.png', fullPage: true });
+  await page.getByRole('link', { name: 'Irrigation', exact: true }).click();
+  await page.getByLabel('Water depth (mm)').fill('20');
+  await page.getByRole('button', { name: 'Apply water' }).click();
+  await expect(page.getByRole('status')).toContainText('Irrigation applied');
+  await page.getByRole('link', { name: 'What-if lab' }).click();
+  await page.getByRole('button', { name: 'Run experiment' }).click();
+  await expect(page.getByRole('heading', { name: '25% less irrigation' })).toBeVisible();
+  await expect(page.getByRole('cell', { name: 'Water applied', exact: true })).toBeVisible();
+  await page.getByRole('link', { name: 'Overview', exact: true }).click();
+  await expect(page.getByText('Day 7 · live state')).toBeVisible();
+  await page.getByLabel('Timeline').fill('0');
+  await expect(page.getByText('Day 0 · replaying saved state')).toBeVisible();
+  await page.getByRole('button', { name: 'Return to live state' }).click();
+  await expect(page.getByText('Day 7 · live state')).toBeVisible();
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.screenshot({ path: 'work/dashboard-mobile.png', fullPage: true });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.getByRole('button', { name: 'Toggle navigation' }).click();
+  await expect(page.getByRole('link', { name: 'My farms', exact: true })).toBeVisible();
+  expect(errors).toEqual([]);
+});
+test('register and create a farm, then edit and delete it', async ({ page }) => {
+  await page.goto('/register');
+  await page.getByLabel('Your name').fill('Test Grower');
+  await page.getByLabel('Email address').fill(`grower-${Date.now()}@example.com`);
+  await page.getByLabel('Password').fill('SecureTestPassword123');
+  await page.getByRole('button', { name: 'Create account', exact: true }).click();
+  await page.getByRole('link', { name: 'Create your first farm' }).click();
+  await page.getByLabel('Farm name', { exact: true }).fill('Sunrise test farm');
+  await page.getByLabel('Location name').fill('Bengaluru');
+  await page.getByRole('button', { name: 'Create digital farm' }).click();
+  await expect(page.getByRole('heading', { name: 'Digital farm', exact: true })).toBeVisible();
+  await page.getByRole('link', { name: 'Farm settings', exact: true }).click();
+  await page.getByLabel('Name', { exact: true }).fill('Sunrise updated');
+  await page.getByRole('button', { name: 'Save changes' }).click();
+  await expect(page.getByRole('status')).toContainText('saved');
+  await page.getByRole('button', { name: 'Delete farm', exact: true }).click();
+  await page.getByRole('button', { name: 'Permanently delete Sunrise updated' }).click();
+  await expect(page.getByRole('heading', { name: 'A fresh field of possibilities' })).toBeVisible();
+});

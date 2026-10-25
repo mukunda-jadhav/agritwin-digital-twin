@@ -60,23 +60,32 @@ export async function createApp(
   app.set('trust proxy', 1);
   app.use(
     helmet({
+      crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' },
       contentSecurityPolicy: {
         directives: {
           ...helmet.contentSecurityPolicy.getDefaultDirectives(),
-          'script-src': ["'self'", 'https://apis.google.com', 'https://www.gstatic.com'],
+          'script-src': [
+            "'self'",
+            'https://apis.google.com',
+            'https://www.gstatic.com',
+            'https://accounts.google.com/gsi/client',
+          ],
           'connect-src': [
             "'self'",
             'https://identitytoolkit.googleapis.com',
             'https://securetoken.googleapis.com',
             'https://www.googleapis.com',
             'https://firebaseinstallations.googleapis.com',
+            'https://accounts.google.com/gsi/',
           ],
           'frame-src': [
             "'self'",
             'https://agridigitwin.firebaseapp.com',
             'https://*.firebaseapp.com',
             'https://accounts.google.com',
+            'https://accounts.google.com/gsi/',
           ],
+          'style-src': ["'self'", 'https:', "'unsafe-inline'", 'https://accounts.google.com/gsi/style'],
         },
       },
     }),

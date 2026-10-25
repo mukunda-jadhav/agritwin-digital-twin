@@ -15,5 +15,23 @@ services:
         sync: false
       - key: DIRECT_URL
         sync: false
+      - key: FIREBASE_PROJECT_ID
+        sync: false
+      - key: FIREBASE_CLIENT_EMAIL
+        sync: false
+      - key: FIREBASE_PRIVATE_KEY
+        sync: false
+      - key: VITE_FIREBASE_API_KEY
+        sync: false
+      - key: VITE_FIREBASE_AUTH_DOMAIN
+        sync: false
+      - key: VITE_FIREBASE_PROJECT_ID
+        sync: false
+      - key: VITE_FIREBASE_APP_ID
+        sync: false
+      - key: AGMARKNET_API_KEY
+        sync: false
+      - key: AGMARKNET_RESOURCE_ID
+        value: 9ef84268-d588-465a-a308-a864a43d0070
       - key: COOKIE_SAME_SITE
         value: lax

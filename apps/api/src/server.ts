@@ -35,6 +35,7 @@ if (
 const here = path.dirname(fileURLToPath(import.meta.url));
 const webDistCandidates = [
   process.env.WEB_DIST_DIR,
+  path.resolve(here, 'public'),
   path.resolve(here, '../../web/dist'),
   path.resolve(process.cwd(), 'apps/web/dist'),
   path.resolve(process.cwd(), '../web/dist'),

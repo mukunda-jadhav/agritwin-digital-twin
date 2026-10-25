@@ -58,7 +58,29 @@ export async function createApp(
     revoked = new Map<string, number>();
   const prod = process.env.NODE_ENV === 'production';
   app.set('trust proxy', 1);
-  app.use(helmet());
+  app.use(
+    helmet({
+      contentSecurityPolicy: {
+        directives: {
+          ...helmet.contentSecurityPolicy.getDefaultDirectives(),
+          'script-src': ["'self'", 'https://apis.google.com', 'https://www.gstatic.com'],
+          'connect-src': [
+            "'self'",
+            'https://identitytoolkit.googleapis.com',
+            'https://securetoken.googleapis.com',
+            'https://www.googleapis.com',
+            'https://firebaseinstallations.googleapis.com',
+          ],
+          'frame-src': [
+            "'self'",
+            'https://agridigitwin.firebaseapp.com',
+            'https://*.firebaseapp.com',
+            'https://accounts.google.com',
+          ],
+        },
+      },
+    }),
+  );
   app.use(cors({ origin, credentials: true }));
   app.use(express.json({ limit: '128kb' }));
   app.use(cookieParser());

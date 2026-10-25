@@ -22,13 +22,13 @@ services:
       - key: FIREBASE_PRIVATE_KEY
         sync: false
       - key: VITE_FIREBASE_API_KEY
-        sync: false
+        value: "AIzaSyB4-jHxYmOe_RjRDhJgBVmSY2mQ9BdYhUY"
       - key: VITE_FIREBASE_AUTH_DOMAIN
-        sync: false
+        value: agridigitwin.firebaseapp.com
       - key: VITE_FIREBASE_PROJECT_ID
-        sync: false
+        value: agridigitwin
       - key: VITE_FIREBASE_APP_ID
-        sync: false
+        value: "1:268899578497:web:3b7e7b86a2cb10ad9e1380"
       - key: AGMARKNET_API_KEY
         sync: false
       - key: AGMARKNET_RESOURCE_ID

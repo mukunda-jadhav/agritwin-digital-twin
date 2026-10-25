@@ -9,10 +9,12 @@ import {
 } from 'firebase/auth';
 import { post } from './api';
 const config = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  // Firebase's browser config is public and must be present in the built client bundle.
+  // Keep environment overrides for other deployments; these defaults match AgriTwin's Firebase app.
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || 'AIzaSyB4-jHxYmOe_RjRDhJgBVmSY2mQ9BdYhUY',
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || 'agridigitwin.firebaseapp.com',
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || 'agridigitwin',
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || '1:268899578497:web:3b7e7b86a2cb10ad9e1380',
 };
 export const googleConfigured = Boolean(
   config.apiKey && config.authDomain && config.projectId && config.appId,

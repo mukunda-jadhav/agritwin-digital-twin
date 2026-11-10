@@ -2,8 +2,16 @@ import { initializeSoil } from './services/initialization.js';
 import { marketPrices, MarketUnavailable } from './services/market.js';
 import { seasonState, isMature } from '@agritwin/shared';
 import { verifiedGoogleIdentity, firebaseEnabled } from './services/firebase.js';
-import { CROPS, CROP_NAMES, MODEL_VERSION } from '@agritwin/shared';
+import {
+  CROPS,
+  CROP_NAMES,
+  MODEL_VERSION,
+  THREATS,
+  RISK_ADVICE,
+  threatsForCrop,
+} from '@agritwin/shared';
 import { harvest } from './simulation/engine.js';
+import { farmThreatReport } from './simulation/threats.js';
 import { openapi } from './openapi.js';
 import express, { type Request, type Response, type NextFunction } from 'express';
 import { createServer } from 'node:http';
@@ -87,7 +95,12 @@ export async function createApp(
             'https://accounts.google.com',
             'https://accounts.google.com/gsi/',
           ],
-          'style-src': ["'self'", 'https:', "'unsafe-inline'", 'https://accounts.google.com/gsi/style'],
+          'style-src': [
+            "'self'",
+            'https:',
+            "'unsafe-inline'",
+            'https://accounts.google.com/gsi/style',
+          ],
         },
       },
     }),
@@ -195,6 +208,10 @@ export async function createApp(
     }),
   );
   app.get('/api/crops', (_, res) => res.json({ crops: Object.values(CROPS), soils: SOILS }));
+  app.get('/api/threats', (req, res) => {
+    const q = z.object({ crop: z.enum(CROP_NAMES).optional() }).parse(req.query);
+    res.json({ threats: q.crop ? threatsForCrop(q.crop) : THREATS, advice: RISK_ADVICE });
+  });
   app.get('/api/auth/providers', (_, res) => res.json({ google: firebaseEnabled() }));
   app.post('/api/auth/firebase', authLimit, async (req, res) => {
     const { idToken } = z.object({ idToken: z.string().min(20).max(10000) }).parse(req.body);
@@ -576,6 +593,10 @@ export async function createApp(
         return predict(p, s, 0, f.run.modelVersion);
       }),
     );
+  });
+  app.get('/api/farms/:id/threats', (req, res) => {
+    const f = owner(String(req.params.id), res.locals.user);
+    res.json({ plots: farmThreatReport(f), advice: RISK_ADVICE });
   });
   app.post('/api/farms/:id/scenarios', async (req, res) => {
     const b = scenarioInput.parse(req.body);

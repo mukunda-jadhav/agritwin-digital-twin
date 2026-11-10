@@ -8,6 +8,7 @@ import {
   experiment,
   initialState,
   irrigate,
+  soilFor,
   newRun,
   stepPlot,
   synthetic,
@@ -36,7 +37,8 @@ test('conserves water under all soils, flooding, heat and prolonged drought', ()
           b.initial + b.rain + b.irrigation - b.loss - b.runoff - b.et - b.drainage - b.final,
         ) < 1e-9,
       );
-      assert.ok(state.water >= 0 && state.water <= SOILS[soil].capacity);
+      // storage is scaled by the crop's root depth in the current model version
+      assert.ok(state.water >= 0 && state.water <= soilFor(p).capacity + 1e-9);
       assert.ok(state.growth >= 0 && state.growth <= 1);
     }
   }
@@ -84,14 +86,14 @@ test('scenario has paired initial states and leaves source untouched', () => {
     farm,
     {
       name: 'Dry',
-      days: 30,
+      days: 120,
       rainMultiplier: 1,
       temperatureDelta: 0,
       irrigationMultiplier: 0,
       interval: 2,
       amount: 15,
     },
-    Array.from({ length: 30 }, (_, i) => ({
+    Array.from({ length: 120 }, (_, i) => ({
       ...synthetic(addDays(plot.plantingDate, i + 1)),
       rain: 0,
     })),

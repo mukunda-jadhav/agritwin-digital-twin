@@ -5,6 +5,7 @@ import { io } from 'socket.io-client';
 import {
   BarChart3,
   Box,
+  Bug,
   Droplets,
   FlaskConical,
   LayoutDashboard,
@@ -22,6 +23,9 @@ import { Farms, Settings } from './pages/Farms';
 import { CreateFarm } from './pages/CreateFarm';
 import { Twin } from './pages/Twin';
 const Analytics = lazy(() => import('./pages/Manage').then((m) => ({ default: m.Analytics })));
+const CropHealth = lazy(() =>
+  import('./pages/CropHealth').then((m) => ({ default: m.CropHealth })),
+);
 const Insights = lazy(() => import('./pages/Manage').then((m) => ({ default: m.Insights })));
 const Irrigation = lazy(() => import('./pages/Manage').then((m) => ({ default: m.Irrigation })));
 const Scenarios = lazy(() => import('./pages/Manage').then((m) => ({ default: m.Scenarios })));
@@ -37,6 +41,7 @@ const nav = [
   { path: '/app/analytics', label: 'Farm analytics', icon: BarChart3 },
   { path: '/app/irrigation', label: 'Irrigation', icon: Droplets },
   { path: '/app/insights', label: 'Crop advice', icon: Leaf },
+  { path: '/app/health', label: 'Crop health', icon: Bug },
   { path: '/app/scenarios', label: 'Scenario analysis', icon: FlaskConical },
 ];
 export default function App() {
@@ -248,6 +253,7 @@ function Shell() {
                 <Route path="analytics" element={<Analytics />} />
                 <Route path="irrigation" element={<Irrigation />} />
                 <Route path="insights" element={<Insights />} />
+                <Route path="health" element={<CropHealth />} />
                 <Route path="scenarios" element={<Scenarios />} />
                 <Route path="settings" element={<Settings />} />
                 <Route path="*" element={<Navigate to="/app" replace />} />

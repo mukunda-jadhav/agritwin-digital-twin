@@ -383,6 +383,84 @@ Object.assign(entries, {
     'सर्व्हर सध्या उपलब्ध नाही. पुन्हा प्रयत्न करा.',
   ],
 });
+Object.assign(entries, {
+  'Crop health': ['फसल स्वास्थ्य', 'पीक आरोग्य'],
+  'DISEASE & PEST WATCH': ['रोग और कीट निगरानी', 'रोग व किडी निरीक्षण'],
+  'See which diseases and pests current weather and crop stage favour, and what to scout for.': [
+    'देखें कि मौजूदा मौसम और फसल अवस्था किन रोगों और कीटों के लिए अनुकूल है, और किन बातों की जाँच करें।',
+    'सध्याचे हवामान आणि पिकाची अवस्था कोणत्या रोग व किडींना अनुकूल आहे आणि काय तपासावे ते पहा.',
+  ],
+  'A risk index, not a diagnosis': [
+    'यह जोखिम सूचकांक है, निदान नहीं',
+    'हा जोखीम निर्देशांक आहे, निदान नाही',
+  ],
+  'Scores show how favourable recent regional weather and the crop’s growth stage are for each threat. They do not count pests or confirm disease in your field. Always scout, and confirm with your local agriculture officer or KVK before treating.':
+    [
+      'स्कोर बताते हैं कि हाल का क्षेत्रीय मौसम और फसल की अवस्था हर खतरे के लिए कितनी अनुकूल है। वे आपके खेत में कीटों की गिनती या रोग की पुष्टि नहीं करते। हमेशा खेत में जाकर जाँच करें और उपचार से पहले स्थानीय कृषि अधिकारी या KVK से पुष्टि करें।',
+      'गुण म्हणजे अलीकडील प्रादेशिक हवामान आणि पिकाची वाढीची अवस्था प्रत्येक धोक्यासाठी किती अनुकूल आहे हे दर्शवतात. ते तुमच्या शेतातील किडींची संख्या मोजत नाहीत किंवा रोगाची खात्री करत नाहीत. नेहमी प्रत्यक्ष शेतात पाहणी करा आणि उपचारापूर्वी स्थानिक कृषी अधिकारी किंवा KVK कडून खात्री करा.',
+    ],
+  Low: ['कम', 'कमी'],
+  Moderate: ['मध्यम', 'मध्यम'],
+  High: ['अधिक', 'जास्त'],
+  'Very high': ['बहुत अधिक', 'अत्यंत जास्त'],
+  'Fungal disease': ['फफूंद रोग', 'बुरशीजन्य रोग'],
+  'Bacterial disease': ['जीवाणु रोग', 'जिवाणूजन्य रोग'],
+  Virus: ['विषाणु', 'विषाणू'],
+  'Insect pest': ['कीट', 'कीड'],
+  'Symptoms, scouting and management': [
+    'लक्षण, निरीक्षण और प्रबंधन',
+    'लक्षणे, पाहणी आणि व्यवस्थापन',
+  ],
+  'Susceptible stage': ['संवेदनशील अवस्था', 'संवेदनशील अवस्था'],
+  'What to look for': ['क्या देखें', 'काय पहावे'],
+  'How to scout': ['जाँच कैसे करें', 'पाहणी कशी करावी'],
+  Management: ['प्रबंधन', 'व्यवस्थापन'],
+  'Risk over the last days': ['पिछले दिनों का जोखिम', 'मागील दिवसांतील जोखीम'],
+  'No special action. Keep routine weekly scouting.': [
+    'कोई विशेष कदम नहीं। साप्ताहिक जाँच जारी रखें।',
+    'विशेष कृती नाही. आठवड्याची नियमित पाहणी सुरू ठेवा.',
+  ],
+  'Scout the field in the next 2–3 days and check traps or lower leaves.': [
+    'अगले 2–3 दिनों में खेत की जाँच करें और ट्रैप या निचली पत्तियाँ देखें।',
+    'पुढील 2–3 दिवसांत शेताची पाहणी करा आणि सापळे किंवा खालची पाने तपासा.',
+  ],
+  'Scout now. Prepare to act if counts reach the local threshold and carry out the cultural steps listed.':
+    [
+      'अभी खेत की जाँच करें। संख्या स्थानीय सीमा तक पहुँचे तो कार्रवाई के लिए तैयार रहें और बताए गए सस्य उपाय अपनाएँ।',
+      'आत्ताच पाहणी करा. संख्या स्थानिक मर्यादेपर्यंत पोहोचल्यास कृती करण्यास तयार रहा आणि दिलेले मशागतीचे उपाय करा.',
+    ],
+  'Scout today and again in 2–3 days. Confirm with your local agriculture officer or KVK before treating.':
+    [
+      'आज और फिर 2–3 दिन बाद जाँच करें। उपचार से पहले स्थानीय कृषि अधिकारी या KVK से पुष्टि करें।',
+      'आज आणि पुन्हा 2–3 दिवसांनी पाहणी करा. उपचारापूर्वी स्थानिक कृषी अधिकारी किंवा KVK कडून खात्री करा.',
+    ],
+  'Fewer than 3 days of weather so far, so this reading is only indicative.': [
+    'अब तक 3 दिन से कम का मौसम है, इसलिए यह केवल संकेत है।',
+    'आतापर्यंत 3 दिवसांपेक्षा कमी हवामान असल्याने हे फक्त सूचक आहे.',
+  ],
+  'No provider weather has been saved for this run yet. Advance the simulation by a day to start the watch.':
+    [
+      'इस रन के लिए अभी कोई मौसम डेटा सहेजा नहीं गया है। निगरानी शुरू करने के लिए सिमुलेशन एक दिन आगे बढ़ाएँ।',
+      'या रनसाठी अद्याप हवामान डेटा जतन केलेला नाही. निरीक्षण सुरू करण्यासाठी सिम्युलेशन एक दिवस पुढे न्या.',
+    ],
+  'Based on {{days}} days of weather up to {{date}}': [
+    '{{date}} तक {{days}} दिनों के मौसम पर आधारित',
+    '{{date}} पर्यंतच्या {{days}} दिवसांच्या हवामानावर आधारित',
+  ],
+  '{{count}} threats at High or Very high risk': [
+    'अधिक या बहुत अधिक जोखिम वाले {{count}} खतरे',
+    'जास्त किंवा अत्यंत जास्त जोखीम असलेले {{count}} धोके',
+  ],
+  'No threats at High risk right now': [
+    'अभी कोई खतरा अधिक जोखिम पर नहीं',
+    'सध्या कोणताही धोका जास्त जोखमीचा नाही',
+  ],
+  'Not at risk at this growth stage': ['इस अवस्था में जोखिम नहीं', 'या अवस्थेत धोका नाही'],
+  'These threats attack other stages of this crop. Check again as it develops.': [
+    'ये खतरे इस फसल की अन्य अवस्थाओं पर हमला करते हैं। फसल बढ़ने पर फिर देखें।',
+    'हे धोके या पिकाच्या इतर अवस्थांवर येतात. पीक वाढल्यावर पुन्हा पहा.',
+  ],
+});
 Object.assign(entries, helpTranslations);
 const en = Object.fromEntries(Object.keys(entries).map((k) => [k, k])),
   hi = Object.fromEntries(Object.entries(entries).map(([k, v]) => [k, v[0]])),

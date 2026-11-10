@@ -16,6 +16,8 @@ Weather comes from Open-Meteo forecast and historical reanalysis. No weather API
 
 Supported crop profiles include wheat, maize, tomato, soybean, cotton, tur (pigeonpea), jowar, bajra, gram (chickpea), rice, groundnut and sugarcane. Crop profiles are reference assumptions. Weather is provider data; soil water, crop development, stress, irrigation recommendations and yield are model estimates. This is a research prototype and has not been validated against field sensors, measured irrigation or harvested yields.
 
+**Crop health.** The Crop health page rates the current risk of diseases and pests for each plot from recent weather and the crop's growth stage, and lists what to look for, how to scout and which integrated pest management steps apply. It covers 40 diseases and pests across all 12 crops. It is a risk index, not a diagnosis, and does not count pests in the field; see docs/MODELING.md.
+
 The 3D view is a schematic representation of plots and crop development. Its camera stays in place while daily states update. A simulation pauses automatically at crop maturity and presents the harvest action.
 
 ## Production configuration

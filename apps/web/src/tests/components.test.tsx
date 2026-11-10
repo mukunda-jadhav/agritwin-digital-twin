@@ -22,6 +22,8 @@ test('moisture labels map root-zone water to bounded available percentage', () =
 });
 test('dashboard aggregates plots by area rather than arithmetic mean', () => {
   const farm = {
+      // legacy model version keeps the reference 0.30 m root zone these expected values assume
+      run: { modelVersion: 'tomato-educational-v1' },
       plots: [
         { id: 'a', soil: 'Loam', area: 100 },
         { id: 'b', soil: 'Loam', area: 900 },
@@ -38,4 +40,39 @@ test('dashboard aggregates plots by area rather than arithmetic mean', () => {
   assert.equal(result.growth, 10);
   assert.equal(result.water, 40);
   assert.equal(result.yield, 60);
+});
+test('crop health cards render risk, drivers, stage and guidance for every threat', async () => {
+  const { ThreatCard } = await import('../components/ThreatCard');
+  const { THREATS, assessPlotThreats, CROP_NAMES } = await import('@agritwin/shared');
+  const day = {
+    date: '2026-08-01',
+    temperature: 25,
+    rain: 6,
+    humidity: 92,
+    carried: false,
+    progress: 0.4,
+    stress: 0.3,
+    saturation: 0,
+  };
+  let rendered = 0;
+  for (const crop of CROP_NAMES) {
+    const series = Array.from({ length: 7 }, () => ({ ...day }));
+    for (const a of assessPlotThreats(crop, series)) {
+      const html = renderToStaticMarkup(<ThreatCard a={a} />);
+      const threat = THREATS.find((t) => t.id === a.threatId)!;
+      assert.ok(html.includes(threat.name.replace(/&/g, '&amp;')), threat.id);
+      assert.match(html, /role="meter"/);
+      assert.match(html, new RegExp(`aria-valuenow="${a.score}"`));
+      assert.ok(html.includes('Symptoms, scouting and management'));
+      rendered++;
+    }
+  }
+  assert.equal(
+    rendered,
+    THREATS.reduce((n, t) => n + Object.keys(t.crops).length, 0),
+  );
+});
+test('local Marathi names are written in Devanagari', async () => {
+  const { THREATS } = await import('@agritwin/shared');
+  for (const t of THREATS) if (t.local) assert.match(t.local, /^[\u0900-\u097F\s]+$/, t.id);
 });

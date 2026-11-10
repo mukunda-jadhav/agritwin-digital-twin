@@ -1,0 +1,2157 @@
+diff --git a/README.md b/README.md
+index 509f64b..9deddec 100644
+--- a/README.md
++++ b/README.md
+@@ -16,6 +16,8 @@ Weather comes from Open-Meteo forecast and historical reanalysis. No weather API
+ 
+ Supported crop profiles include wheat, maize, tomato, soybean, cotton, tur (pigeonpea), jowar, bajra, gram (chickpea), rice, groundnut and sugarcane. Crop profiles are reference assumptions. Weather is provider data; soil water, crop development, stress, irrigation recommendations and yield are model estimates. This is a research prototype and has not been validated against field sensors, measured irrigation or harvested yields.
+ 
++**Crop health.** The Crop health page rates the current risk of diseases and pests for each plot from recent weather and the crop's growth stage, and lists what to look for, how to scout and which integrated pest management steps apply. It covers 40 diseases and pests across all 12 crops. It is a risk index, not a diagnosis, and does not count pests in the field; see docs/MODELING.md.
++
+ The 3D view is a schematic representation of plots and crop development. Its camera stays in place while daily states update. A simulation pauses automatically at crop maturity and presents the harvest action.
+ 
+ ## Production configuration
+diff --git a/apps/api/src/app.ts b/apps/api/src/app.ts
+index fa3afa9..2bc5710 100644
+--- a/apps/api/src/app.ts
++++ b/apps/api/src/app.ts
+@@ -2,8 +2,16 @@ import { initializeSoil } from './services/initialization.js';
+ import { marketPrices, MarketUnavailable } from './services/market.js';
+ import { seasonState, isMature } from '@agritwin/shared';
+ import { verifiedGoogleIdentity, firebaseEnabled } from './services/firebase.js';
+-import { CROPS, CROP_NAMES, MODEL_VERSION } from '@agritwin/shared';
++import {
++  CROPS,
++  CROP_NAMES,
++  MODEL_VERSION,
++  THREATS,
++  RISK_ADVICE,
++  threatsForCrop,
++} from '@agritwin/shared';
+ import { harvest } from './simulation/engine.js';
++import { farmThreatReport } from './simulation/threats.js';
+ import { openapi } from './openapi.js';
+ import express, { type Request, type Response, type NextFunction } from 'express';
+ import { createServer } from 'node:http';
+@@ -87,7 +95,12 @@ export async function createApp(
+             'https://accounts.google.com',
+             'https://accounts.google.com/gsi/',
+           ],
+-          'style-src': ["'self'", 'https:', "'unsafe-inline'", 'https://accounts.google.com/gsi/style'],
++          'style-src': [
++            "'self'",
++            'https:',
++            "'unsafe-inline'",
++            'https://accounts.google.com/gsi/style',
++          ],
+         },
+       },
+     }),
+@@ -195,6 +208,10 @@ export async function createApp(
+     }),
+   );
+   app.get('/api/crops', (_, res) => res.json({ crops: Object.values(CROPS), soils: SOILS }));
++  app.get('/api/threats', (req, res) => {
++    const q = z.object({ crop: z.enum(CROP_NAMES).optional() }).parse(req.query);
++    res.json({ threats: q.crop ? threatsForCrop(q.crop) : THREATS, advice: RISK_ADVICE });
++  });
+   app.get('/api/auth/providers', (_, res) => res.json({ google: firebaseEnabled() }));
+   app.post('/api/auth/firebase', authLimit, async (req, res) => {
+     const { idToken } = z.object({ idToken: z.string().min(20).max(10000) }).parse(req.body);
+@@ -577,6 +594,10 @@ export async function createApp(
+       }),
+     );
+   });
++  app.get('/api/farms/:id/threats', (req, res) => {
++    const f = owner(String(req.params.id), res.locals.user);
++    res.json({ plots: farmThreatReport(f), advice: RISK_ADVICE });
++  });
+   app.post('/api/farms/:id/scenarios', async (req, res) => {
+     const b = scenarioInput.parse(req.body);
+     const scenario = await store.transaction(async () => {
+diff --git a/apps/api/src/openapi.ts b/apps/api/src/openapi.ts
+index db6d2f8..ff61095 100644
+--- a/apps/api/src/openapi.ts
++++ b/apps/api/src/openapi.ts
+@@ -148,6 +148,18 @@ route(
+   'Crop water recommendations from the weather-driven soil-water model',
+ );
+ route('/farms/{id}/analytics', 'get', 'Complete snapshots, irrigation events and archives');
++route(
++  '/farms/{id}/threats',
++  'get',
++  'Weather- and stage-driven disease and pest risk index per plot',
++);
++route(
++  '/threats',
++  'get',
++  'Disease and pest reference library (optional crop filter)',
++  undefined,
++  false,
++);
+ route(
+   '/farms/{id}/scenarios',
+   'post',
+diff --git a/apps/api/src/simulation/threats.ts b/apps/api/src/simulation/threats.ts
+new file mode 100644
+index 0000000..159b572
+--- /dev/null
++++ b/apps/api/src/simulation/threats.ts
+@@ -0,0 +1,53 @@
++import {
++  assessPlotThreats,
++  cropFor,
++  type Farm,
++  type PlotThreatReport,
++  type Plot,
++  type ThreatDay,
++} from '@agritwin/shared';
++import { clamp, soilFor } from './engine.js';
++
++/** Days of weather history the risk model looks back over, plus one earlier day for rain carry-over. */
++const LOOKBACK = 14;
++
++/**
++ * Convert the plot's saved run history into the daily records the risk model needs.
++ * Snapshots without provider weather (for example day 0) are skipped.
++ */
++export function threatSeries(farm: Farm, plot: Plot): ThreatDay[] {
++  const crop = cropFor(plot.crop),
++    soil = soilFor(plot, true),
++    days: ThreatDay[] = [];
++  for (const snap of farm.run.history) {
++    const w = snap.weather,
++      s = snap.states.find((x) => x.plotId === plot.id);
++    if (!w || !s || w.source === 'synthetic') continue;
++    days.push({
++      date: snap.date,
++      temperature: w.temperature,
++      rain: w.rain,
++      humidity: w.humidity,
++      carried: w.source === 'carried-forward',
++      progress: clamp(s.gdd / crop.maturityGdd),
++      stress: s.stress,
++      saturation: clamp((s.water - soil.field) / Math.max(1e-9, soil.capacity - soil.field)),
++    });
++  }
++  return days.slice(-LOOKBACK);
++}
++
++export function farmThreatReport(farm: Farm): PlotThreatReport[] {
++  return farm.plots.map((plot) => {
++    const days = threatSeries(farm, plot),
++      crop = cropFor(plot.crop).name;
++    return {
++      plotId: plot.id,
++      plotName: plot.name,
++      crop,
++      asOf: days.length ? days[days.length - 1].date : null,
++      weatherDays: days.length,
++      assessments: assessPlotThreats(crop, days),
++    };
++  });
++}
+diff --git a/apps/api/src/tests/engine.test.ts b/apps/api/src/tests/engine.test.ts
+index a34f6c3..072f00a 100644
+--- a/apps/api/src/tests/engine.test.ts
++++ b/apps/api/src/tests/engine.test.ts
+@@ -8,6 +8,7 @@ import {
+   experiment,
+   initialState,
+   irrigate,
++  soilFor,
+   newRun,
+   stepPlot,
+   synthetic,
+@@ -36,7 +37,8 @@ test('conserves water under all soils, flooding, heat and prolonged drought', ()
+           b.initial + b.rain + b.irrigation - b.loss - b.runoff - b.et - b.drainage - b.final,
+         ) < 1e-9,
+       );
+-      assert.ok(state.water >= 0 && state.water <= SOILS[soil].capacity);
++      // storage is scaled by the crop's root depth in the current model version
++      assert.ok(state.water >= 0 && state.water <= soilFor(p).capacity + 1e-9);
+       assert.ok(state.growth >= 0 && state.growth <= 1);
+     }
+   }
+@@ -84,14 +86,14 @@ test('scenario has paired initial states and leaves source untouched', () => {
+     farm,
+     {
+       name: 'Dry',
+-      days: 30,
++      days: 120,
+       rainMultiplier: 1,
+       temperatureDelta: 0,
+       irrigationMultiplier: 0,
+       interval: 2,
+       amount: 15,
+     },
+-    Array.from({ length: 30 }, (_, i) => ({
++    Array.from({ length: 120 }, (_, i) => ({
+       ...synthetic(addDays(plot.plantingDate, i + 1)),
+       rain: 0,
+     })),
+diff --git a/apps/api/src/tests/threats.test.ts b/apps/api/src/tests/threats.test.ts
+new file mode 100644
+index 0000000..052f1d7
+--- /dev/null
++++ b/apps/api/src/tests/threats.test.ts
+@@ -0,0 +1,269 @@
++import { test } from 'node:test';
++import assert from 'node:assert/strict';
++import {
++  CROP_NAMES,
++  CROPS,
++  THREATS,
++  assessPlotThreats,
++  assessThreat,
++  riskLevel,
++  threatsForCrop,
++  type Farm,
++  type Plot,
++  type ThreatDay,
++  type Weather,
++} from '@agritwin/shared';
++import { addDays, newRun, tick } from '../simulation/engine.js';
++import { farmThreatReport, threatSeries } from '../simulation/threats.js';
++
++const find = (id: string) => THREATS.find((t) => t.id === id)!;
++const days = (n: number, over: Partial<ThreatDay> = {}): ThreatDay[] =>
++  Array.from({ length: n }, (_, i) => ({
++    date: addDays('2026-07-01', i),
++    temperature: 25,
++    rain: 0,
++    humidity: 60,
++    carried: false,
++    progress: 0.4,
++    stress: 0,
++    saturation: 0,
++    ...over,
++  }));
++
++test('knowledge base is complete and internally consistent', () => {
++  const ids = new Set<string>();
++  for (const t of THREATS) {
++    assert.ok(!ids.has(t.id), `duplicate id ${t.id}`);
++    ids.add(t.id);
++    assert.ok(
++      t.temp.min < t.temp.optLow && t.temp.optLow <= t.temp.optHigh && t.temp.optHigh < t.temp.max,
++      t.id,
++    );
++    if (t.humidity) assert.ok(t.humidity.min < t.humidity.full && t.humidity.full <= 100, t.id);
++    assert.ok(t.mode !== 'wet' || t.humidity, `${t.id}: wet-weather threats need a humidity range`);
++    assert.ok(t.symptoms.length > 20 && t.scouting.length > 15 && t.management.length >= 2, t.id);
++    for (const [crop, [a, b]] of Object.entries(t.crops)) {
++      assert.ok(crop in CROPS, `${t.id}: unknown crop ${crop}`);
++      assert.ok(a >= 0 && b <= 1 && a < b, `${t.id}: bad window for ${crop}`);
++    }
++  }
++});
++
++test('every supported crop has disease and pest coverage including both kinds', () => {
++  for (const crop of CROP_NAMES) {
++    const list = threatsForCrop(crop);
++    assert.ok(list.length >= 2, `${crop} has too few threats`);
++    assert.ok(
++      list.some((t) => t.kind === 'insect'),
++      `${crop} has no pest`,
++    );
++    assert.ok(
++      list.some((t) => t.kind !== 'insect'),
++      `${crop} has no disease`,
++    );
++  }
++});
++
++test('late blight is high in cool, humid, rainy weather and low in hot dry weather', () => {
++  const lb = find('tomato-late-blight');
++  const cool = assessThreat(lb, 'Tomato', days(7, { temperature: 16, humidity: 93, rain: 6 }));
++  const hot = assessThreat(lb, 'Tomato', days(7, { temperature: 34, humidity: 40, rain: 0 }));
++  assert.ok(cool.score >= 70, `cool score ${cool.score}`);
++  assert.equal(cool.level, 'Very high');
++  assert.equal(hot.score, 0);
++  assert.equal(hot.level, 'Low');
++});
++
++test('whitefly-spread virus favours hot, dry weather over cool, humid weather', () => {
++  const v = find('tomato-leaf-curl');
++  const hotDry = assessThreat(
++    v,
++    'Tomato',
++    days(7, { temperature: 30, humidity: 40, progress: 0.15 }),
++  );
++  const coolWet = assessThreat(
++    v,
++    'Tomato',
++    days(7, { temperature: 21, humidity: 92, rain: 8, progress: 0.15 }),
++  );
++  assert.ok(hotDry.score > coolWet.score + 40);
++});
++
++test('no risk is reported outside the susceptible crop stage', () => {
++  const rust = find('wheat-leaf-rust');
++  const early = assessThreat(
++    rust,
++    'Wheat',
++    days(7, { temperature: 18, humidity: 90, rain: 5, progress: 0.02 }),
++  );
++  const late = assessThreat(
++    rust,
++    'Wheat',
++    days(7, { temperature: 18, humidity: 90, rain: 5, progress: 0.98 }),
++  );
++  for (const r of [early, late]) {
++    assert.equal(r.status, 'outside-stage');
++    assert.equal(r.score, 0);
++    assert.equal(r.level, 'Low');
++  }
++  assert.match(early.drivers[0], /not yet reached/);
++  assert.match(late.drivers[0], /passed/);
++});
++
++test('water stress raises charcoal rot risk', () => {
++  const cr = find('jowar-charcoal-rot');
++  const base = { temperature: 33, humidity: 40, progress: 0.7 };
++  const calm = assessThreat(cr, 'Jowar', days(7, { ...base, stress: 0 }));
++  const stressed = assessThreat(cr, 'Jowar', days(7, { ...base, stress: 1 }));
++  assert.ok(stressed.score > calm.score);
++  assert.ok(stressed.drivers.some((d) => /water stress/i.test(d)));
++});
++
++test('waterlogging raises Phytophthora blight risk', () => {
++  const pb = find('tur-phytophthora-blight');
++  const base = { temperature: 27, humidity: 90, rain: 10, progress: 0.2 };
++  const dry = assessThreat(pb, 'Tur', days(7, { ...base, saturation: 0 }));
++  const soggy = assessThreat(pb, 'Tur', days(7, { ...base, saturation: 1 }));
++  assert.ok(soggy.score > dry.score);
++});
++
++test('not enough weather is flagged rather than guessed', () => {
++  const none = assessThreat(find('rice-blast'), 'Rice', []);
++  assert.equal(none.status, 'insufficient-weather');
++  assert.equal(none.score, 0);
++  const short = assessThreat(
++    find('rice-blast'),
++    'Rice',
++    days(2, { temperature: 24, humidity: 92, rain: 6, progress: 0.3 }),
++  );
++  assert.equal(short.status, 'insufficient-weather');
++});
++
++test('carried-forward weather lowers confidence and is disclosed', () => {
++  const r = assessThreat(
++    find('rice-blast'),
++    'Rice',
++    days(7, { temperature: 24, humidity: 92, rain: 0, progress: 0.3, carried: true }),
++  );
++  assert.equal(r.carriedDays, 7);
++  assert.ok(r.drivers.some((d) => /carried forward/.test(d)));
++});
++
++test('scores are always integers from 0 to 100 and levels match thresholds', () => {
++  let seed = 7;
++  const rnd = () => (seed = (seed * 1664525 + 1013904223) % 4294967296) / 4294967296;
++  for (const crop of CROP_NAMES) {
++    for (let run = 0; run < 40; run++) {
++      const series = days(1 + Math.floor(rnd() * 14)).map((d) => ({
++        ...d,
++        temperature: -5 + rnd() * 55,
++        rain: rnd() < 0.4 ? rnd() * 80 : 0,
++        humidity: rnd() * 100,
++        progress: rnd(),
++        stress: rnd(),
++        saturation: rnd(),
++        carried: rnd() < 0.2,
++      }));
++      for (const a of assessPlotThreats(crop, series)) {
++        assert.ok(
++          Number.isInteger(a.score) && a.score >= 0 && a.score <= 100,
++          `${a.threatId} ${a.score}`,
++        );
++        assert.equal(a.level, riskLevel(a.score));
++        assert.ok(a.trend.every((v) => Number.isInteger(v) && v >= 0 && v <= 100));
++      }
++    }
++  }
++  assert.deepEqual([24, 25, 49, 50, 69, 70].map(riskLevel), [
++    'Low',
++    'Moderate',
++    'Moderate',
++    'High',
++    'High',
++    'Very high',
++  ]);
++});
++
++test('assessments are sorted highest risk first and trend has one value per day (max 7)', () => {
++  const list = assessPlotThreats(
++    'Rice',
++    days(10, { temperature: 25, humidity: 92, rain: 6, progress: 0.3 }),
++  );
++  for (let i = 1; i < list.length; i++) assert.ok(list[i - 1].score >= list[i].score);
++  assert.equal(list[0].trend.length, 7);
++});
++
++test('a threat cannot be assessed for a crop it does not attack', () => {
++  assert.throws(() => assessThreat(find('rice-blast'), 'Wheat', days(5)));
++});
++
++test('farm report is built from saved provider weather only and is deterministic', () => {
++  const plot: Plot = {
++    id: 'p1',
++    name: 'North',
++    area: 1000,
++    soil: 'Loam',
++    method: 'Drip',
++    plantingDate: '2026-07-01',
++    crop: 'Rice',
++  };
++  const run = newRun([plot], '2026-07-01');
++  const weather = (date: string, over: Partial<Weather> = {}): Weather => ({
++    date,
++    temperature: 25,
++    rain: 6,
++    et0: 3.5,
++    humidity: 92,
++    solar: 16,
++    source: 'historical',
++    ...over,
++  });
++  for (let i = 1; i <= 25; i++) tick(run, [plot], weather(addDays('2026-07-01', i)));
++  const farm = { plots: [plot], run } as unknown as Farm;
++  const a = farmThreatReport(farm),
++    b = farmThreatReport(structuredClone(farm));
++  assert.deepEqual(a, b);
++  assert.equal(a[0].crop, 'Rice');
++  assert.ok(a[0].weatherDays > 0 && a[0].weatherDays <= 14);
++  assert.equal(a[0].asOf, '2026-07-26');
++  assert.ok(a[0].assessments.length >= 4);
++
++  // generated weather is never used as evidence
++  const fake = newRun([plot], '2026-07-01');
++  tick(fake, [plot], weather('2026-07-02', { source: 'synthetic' }));
++  assert.equal(threatSeries({ plots: [plot], run: fake } as unknown as Farm, plot).length, 0);
++});
++
++test('weather alone cannot make a pest read Very high, but can for weather-driven disease', () => {
++  const ideal = (over: Partial<ThreatDay>) => days(7, { humidity: 90, rain: 6, ...over });
++  const insectNeutral = assessThreat(
++    find('cotton-pink-bollworm'),
++    'Cotton',
++    ideal({ temperature: 28, progress: 0.6 }),
++  );
++  const insectWet = assessThreat(
++    find('rice-planthopper'),
++    'Rice',
++    ideal({ temperature: 27, progress: 0.5 }),
++  );
++  const vector = assessThreat(
++    find('tomato-leaf-curl'),
++    'Tomato',
++    days(7, { temperature: 30, humidity: 35, progress: 0.15, stress: 1 }),
++  );
++  const fungal = assessThreat(
++    find('rice-blast'),
++    'Rice',
++    ideal({ temperature: 24, humidity: 96, progress: 0.3 }),
++  );
++  assert.ok(
++    insectNeutral.score <= 45 &&
++      insectNeutral.level !== 'High' &&
++      insectNeutral.level !== 'Very high',
++  );
++  assert.ok(insectWet.score <= 65 && insectWet.level !== 'Very high');
++  assert.ok(vector.score <= 65 && vector.level !== 'Very high');
++  assert.equal(fungal.level, 'Very high');
++  assert.ok(insectNeutral.drivers.some((d) => /not how many are present/.test(d)));
++  assert.ok(!fungal.drivers.some((d) => /not how many are present/.test(d)));
++});
+diff --git a/apps/web/src/App.tsx b/apps/web/src/App.tsx
+index 4ca48f5..3b73994 100644
+--- a/apps/web/src/App.tsx
++++ b/apps/web/src/App.tsx
+@@ -5,6 +5,7 @@ import { io } from 'socket.io-client';
+ import {
+   BarChart3,
+   Box,
++  Bug,
+   Droplets,
+   FlaskConical,
+   LayoutDashboard,
+@@ -22,6 +23,9 @@ import { Farms, Settings } from './pages/Farms';
+ import { CreateFarm } from './pages/CreateFarm';
+ import { Twin } from './pages/Twin';
+ const Analytics = lazy(() => import('./pages/Manage').then((m) => ({ default: m.Analytics })));
++const CropHealth = lazy(() =>
++  import('./pages/CropHealth').then((m) => ({ default: m.CropHealth })),
++);
+ const Insights = lazy(() => import('./pages/Manage').then((m) => ({ default: m.Insights })));
+ const Irrigation = lazy(() => import('./pages/Manage').then((m) => ({ default: m.Irrigation })));
+ const Scenarios = lazy(() => import('./pages/Manage').then((m) => ({ default: m.Scenarios })));
+@@ -37,6 +41,7 @@ const nav = [
+   { path: '/app/analytics', label: 'Farm analytics', icon: BarChart3 },
+   { path: '/app/irrigation', label: 'Irrigation', icon: Droplets },
+   { path: '/app/insights', label: 'Crop advice', icon: Leaf },
++  { path: '/app/health', label: 'Crop health', icon: Bug },
+   { path: '/app/scenarios', label: 'Scenario analysis', icon: FlaskConical },
+ ];
+ export default function App() {
+@@ -248,6 +253,7 @@ function Shell() {
+                 <Route path="analytics" element={<Analytics />} />
+                 <Route path="irrigation" element={<Irrigation />} />
+                 <Route path="insights" element={<Insights />} />
++                <Route path="health" element={<CropHealth />} />
+                 <Route path="scenarios" element={<Scenarios />} />
+                 <Route path="settings" element={<Settings />} />
+                 <Route path="*" element={<Navigate to="/app" replace />} />
+diff --git a/apps/web/src/components/ThreatCard.tsx b/apps/web/src/components/ThreatCard.tsx
+new file mode 100644
+index 0000000..8332f5f
+--- /dev/null
++++ b/apps/web/src/components/ThreatCard.tsx
+@@ -0,0 +1,113 @@
++import { ChevronDown } from 'lucide-react';
++import {
++  RISK_ADVICE,
++  THREATS,
++  type RiskLevel,
++  type Threat,
++  type ThreatAssessment,
++} from '@agritwin/shared';
++import { t } from '../i18n';
++
++const kindLabel: Record<Threat['kind'], string> = {
++  fungal: 'Fungal disease',
++  bacterial: 'Bacterial disease',
++  viral: 'Virus',
++  insect: 'Insect pest',
++};
++export const threatById = new Map(THREATS.map((th) => [th.id, th]));
++const levelClass = (l: RiskLevel) => l.toLowerCase().replace(' ', '-');
++
++function Trend({ values }: { values: number[] }) {
++  if (values.length < 2) return null;
++  return (
++    <svg
++      className="threat-trend"
++      viewBox={`0 0 ${values.length * 8} 24`}
++      role="img"
++      aria-label={`${t('Risk over the last days')}: ${values.join(', ')}`}
++    >
++      {values.map((v, i) => (
++        <rect
++          key={i}
++          x={i * 8 + 1}
++          y={24 - Math.max(1, (v / 100) * 24)}
++          width="6"
++          height={Math.max(1, (v / 100) * 24)}
++          rx="1"
++        />
++      ))}
++    </svg>
++  );
++}
++
++export function ThreatCard({ a }: { a: ThreatAssessment }) {
++  const th = threatById.get(a.threatId)!;
++  return (
++    <article className={`card threat-card level-${levelClass(a.level)}`}>
++      <div className="threat-head">
++        <div>
++          <h3>{th.name}</h3>
++          <p className="muted">
++            <em>{th.scientific}</em>
++            {th.local && (
++              <>
++                {' · '}
++                <span lang="mr">{th.local}</span>
++              </>
++            )}
++          </p>
++        </div>
++        <span className="tiny-badge">{t(kindLabel[th.kind])}</span>
++      </div>
++      <div className="threat-risk">
++        <div
++          className="threat-meter"
++          role="meter"
++          aria-valuemin={0}
++          aria-valuemax={100}
++          aria-valuenow={a.score}
++          aria-label={th.name}
++        >
++          <span style={{ width: `${a.score}%` }} />
++        </div>
++        <strong>
++          {t(a.level)} · {a.score}
++        </strong>
++        <Trend values={a.trend} />
++      </div>
++      <p className="threat-advice">{t(RISK_ADVICE[a.level])}</p>
++      {a.status === 'insufficient-weather' && (
++        <p className="muted">
++          {t('Fewer than 3 days of weather so far, so this reading is only indicative.')}
++        </p>
++      )}
++      <ul className="threat-drivers">
++        {a.drivers.map((d) => (
++          <li key={d}>{d}</li>
++        ))}
++      </ul>
++      <details className="threat-more">
++        <summary>
++          {t('Symptoms, scouting and management')} <ChevronDown size={14} />
++        </summary>
++        <p>
++          <strong>{t('Susceptible stage')}:</strong> {a.window}
++        </p>
++        <p>
++          <strong>{t('What to look for')}:</strong> {th.symptoms}
++        </p>
++        <p>
++          <strong>{t('How to scout')}:</strong> {th.scouting}
++        </p>
++        <p>
++          <strong>{t('Management')}:</strong>
++        </p>
++        <ul>
++          {th.management.map((m) => (
++            <li key={m}>{m}</li>
++          ))}
++        </ul>
++      </details>
++    </article>
++  );
++}
+diff --git a/apps/web/src/i18n.ts b/apps/web/src/i18n.ts
+index fd39d8f..68a3abc 100644
+--- a/apps/web/src/i18n.ts
++++ b/apps/web/src/i18n.ts
+@@ -383,6 +383,84 @@ Object.assign(entries, {
+     'सर्व्हर सध्या उपलब्ध नाही. पुन्हा प्रयत्न करा.',
+   ],
+ });
++Object.assign(entries, {
++  'Crop health': ['फसल स्वास्थ्य', 'पीक आरोग्य'],
++  'DISEASE & PEST WATCH': ['रोग और कीट निगरानी', 'रोग व किडी निरीक्षण'],
++  'See which diseases and pests current weather and crop stage favour, and what to scout for.': [
++    'देखें कि मौजूदा मौसम और फसल अवस्था किन रोगों और कीटों के लिए अनुकूल है, और किन बातों की जाँच करें।',
++    'सध्याचे हवामान आणि पिकाची अवस्था कोणत्या रोग व किडींना अनुकूल आहे आणि काय तपासावे ते पहा.',
++  ],
++  'A risk index, not a diagnosis': [
++    'यह जोखिम सूचकांक है, निदान नहीं',
++    'हा जोखीम निर्देशांक आहे, निदान नाही',
++  ],
++  'Scores show how favourable recent regional weather and the crop’s growth stage are for each threat. They do not count pests or confirm disease in your field. Always scout, and confirm with your local agriculture officer or KVK before treating.':
++    [
++      'स्कोर बताते हैं कि हाल का क्षेत्रीय मौसम और फसल की अवस्था हर खतरे के लिए कितनी अनुकूल है। वे आपके खेत में कीटों की गिनती या रोग की पुष्टि नहीं करते। हमेशा खेत में जाकर जाँच करें और उपचार से पहले स्थानीय कृषि अधिकारी या KVK से पुष्टि करें।',
++      'गुण म्हणजे अलीकडील प्रादेशिक हवामान आणि पिकाची वाढीची अवस्था प्रत्येक धोक्यासाठी किती अनुकूल आहे हे दर्शवतात. ते तुमच्या शेतातील किडींची संख्या मोजत नाहीत किंवा रोगाची खात्री करत नाहीत. नेहमी प्रत्यक्ष शेतात पाहणी करा आणि उपचारापूर्वी स्थानिक कृषी अधिकारी किंवा KVK कडून खात्री करा.',
++    ],
++  Low: ['कम', 'कमी'],
++  Moderate: ['मध्यम', 'मध्यम'],
++  High: ['अधिक', 'जास्त'],
++  'Very high': ['बहुत अधिक', 'अत्यंत जास्त'],
++  'Fungal disease': ['फफूंद रोग', 'बुरशीजन्य रोग'],
++  'Bacterial disease': ['जीवाणु रोग', 'जिवाणूजन्य रोग'],
++  Virus: ['विषाणु', 'विषाणू'],
++  'Insect pest': ['कीट', 'कीड'],
++  'Symptoms, scouting and management': [
++    'लक्षण, निरीक्षण और प्रबंधन',
++    'लक्षणे, पाहणी आणि व्यवस्थापन',
++  ],
++  'Susceptible stage': ['संवेदनशील अवस्था', 'संवेदनशील अवस्था'],
++  'What to look for': ['क्या देखें', 'काय पहावे'],
++  'How to scout': ['जाँच कैसे करें', 'पाहणी कशी करावी'],
++  Management: ['प्रबंधन', 'व्यवस्थापन'],
++  'Risk over the last days': ['पिछले दिनों का जोखिम', 'मागील दिवसांतील जोखीम'],
++  'No special action. Keep routine weekly scouting.': [
++    'कोई विशेष कदम नहीं। साप्ताहिक जाँच जारी रखें।',
++    'विशेष कृती नाही. आठवड्याची नियमित पाहणी सुरू ठेवा.',
++  ],
++  'Scout the field in the next 2–3 days and check traps or lower leaves.': [
++    'अगले 2–3 दिनों में खेत की जाँच करें और ट्रैप या निचली पत्तियाँ देखें।',
++    'पुढील 2–3 दिवसांत शेताची पाहणी करा आणि सापळे किंवा खालची पाने तपासा.',
++  ],
++  'Scout now. Prepare to act if counts reach the local threshold and carry out the cultural steps listed.':
++    [
++      'अभी खेत की जाँच करें। संख्या स्थानीय सीमा तक पहुँचे तो कार्रवाई के लिए तैयार रहें और बताए गए सस्य उपाय अपनाएँ।',
++      'आत्ताच पाहणी करा. संख्या स्थानिक मर्यादेपर्यंत पोहोचल्यास कृती करण्यास तयार रहा आणि दिलेले मशागतीचे उपाय करा.',
++    ],
++  'Scout today and again in 2–3 days. Confirm with your local agriculture officer or KVK before treating.':
++    [
++      'आज और फिर 2–3 दिन बाद जाँच करें। उपचार से पहले स्थानीय कृषि अधिकारी या KVK से पुष्टि करें।',
++      'आज आणि पुन्हा 2–3 दिवसांनी पाहणी करा. उपचारापूर्वी स्थानिक कृषी अधिकारी किंवा KVK कडून खात्री करा.',
++    ],
++  'Fewer than 3 days of weather so far, so this reading is only indicative.': [
++    'अब तक 3 दिन से कम का मौसम है, इसलिए यह केवल संकेत है।',
++    'आतापर्यंत 3 दिवसांपेक्षा कमी हवामान असल्याने हे फक्त सूचक आहे.',
++  ],
++  'No provider weather has been saved for this run yet. Advance the simulation by a day to start the watch.':
++    [
++      'इस रन के लिए अभी कोई मौसम डेटा सहेजा नहीं गया है। निगरानी शुरू करने के लिए सिमुलेशन एक दिन आगे बढ़ाएँ।',
++      'या रनसाठी अद्याप हवामान डेटा जतन केलेला नाही. निरीक्षण सुरू करण्यासाठी सिम्युलेशन एक दिवस पुढे न्या.',
++    ],
++  'Based on {{days}} days of weather up to {{date}}': [
++    '{{date}} तक {{days}} दिनों के मौसम पर आधारित',
++    '{{date}} पर्यंतच्या {{days}} दिवसांच्या हवामानावर आधारित',
++  ],
++  '{{count}} threats at High or Very high risk': [
++    'अधिक या बहुत अधिक जोखिम वाले {{count}} खतरे',
++    'जास्त किंवा अत्यंत जास्त जोखीम असलेले {{count}} धोके',
++  ],
++  'No threats at High risk right now': [
++    'अभी कोई खतरा अधिक जोखिम पर नहीं',
++    'सध्या कोणताही धोका जास्त जोखमीचा नाही',
++  ],
++  'Not at risk at this growth stage': ['इस अवस्था में जोखिम नहीं', 'या अवस्थेत धोका नाही'],
++  'These threats attack other stages of this crop. Check again as it develops.': [
++    'ये खतरे इस फसल की अन्य अवस्थाओं पर हमला करते हैं। फसल बढ़ने पर फिर देखें।',
++    'हे धोके या पिकाच्या इतर अवस्थांवर येतात. पीक वाढल्यावर पुन्हा पहा.',
++  ],
++});
+ Object.assign(entries, helpTranslations);
+ const en = Object.fromEntries(Object.keys(entries).map((k) => [k, k])),
+   hi = Object.fromEntries(Object.entries(entries).map(([k, v]) => [k, v[0]])),
+diff --git a/apps/web/src/pages/CropHealth.tsx b/apps/web/src/pages/CropHealth.tsx
+new file mode 100644
+index 0000000..754ce8f
+--- /dev/null
++++ b/apps/web/src/pages/CropHealth.tsx
+@@ -0,0 +1,127 @@
++import { useEffect, useState } from 'react';
++import { Bug, ShieldAlert } from 'lucide-react';
++import type { PlotThreatReport } from '@agritwin/shared';
++import { ThreatCard, threatById } from '../components/ThreatCard';
++import { useFarm } from '../stores/useFarm';
++import { api } from '../services/api';
++import { dateLabel } from '../components/common';
++import { t } from '../i18n';
++
++export function CropHealth() {
++  const { farm, selected, select } = useFarm(),
++    [reports, setReports] = useState<PlotThreatReport[]>([]),
++    [error, setError] = useState(''),
++    [loading, setLoading] = useState(true);
++  useEffect(() => {
++    if (!farm) return;
++    let active = true;
++    setLoading(true);
++    api<{ plots: PlotThreatReport[] }>(`/farms/${farm.id}/threats`)
++      .then((r) => {
++        if (active) {
++          setReports(r.plots);
++          setError('');
++        }
++      })
++      .catch((e) => active && setError(e.message))
++      .finally(() => active && setLoading(false));
++    return () => {
++      active = false;
++    };
++  }, [farm?.id, farm?.run.version]);
++  if (!farm) return null;
++  const plot = farm.plots.find((p) => p.id === selected) || farm.plots[0],
++    report = reports.find((r) => r.plotId === plot.id),
++    active = (report?.assessments || []).filter((a) => a.status !== 'outside-stage'),
++    inactive = (report?.assessments || []).filter((a) => a.status === 'outside-stage'),
++    elevated = active.filter((a) => a.level === 'High' || a.level === 'Very high');
++  return (
++    <>
++      <div className="page-heading">
++        <div className="eyebrow">{t('DISEASE & PEST WATCH')}</div>
++        <h1>{t('Crop health')}</h1>
++        <p>
++          {t(
++            'See which diseases and pests current weather and crop stage favour, and what to scout for.',
++          )}
++        </p>
++      </div>
++      <div className="notice">
++        <ShieldAlert size={20} />
++        <div>
++          <strong>{t('A risk index, not a diagnosis')}</strong>
++          <p>
++            {t(
++              'Scores show how favourable recent regional weather and the crop’s growth stage are for each threat. They do not count pests or confirm disease in your field. Always scout, and confirm with your local agriculture officer or KVK before treating.',
++            )}
++          </p>
++        </div>
++      </div>
++      {error && <p className="error">{error}</p>}
++      <section className="card padded">
++        <div className="section-heading">
++          <h2>
++            <Bug size={16} /> {plot.name} · {t(plot.crop || 'Tomato')}
++          </h2>
++          <label className="field-picker">
++            {t('Select plot')}
++            <select value={plot.id} onChange={(e) => select(e.target.value)}>
++              {farm.plots.map((p) => (
++                <option value={p.id} key={p.id}>
++                  {p.name} · {t(p.crop || 'Tomato')}
++                </option>
++              ))}
++            </select>
++          </label>
++        </div>
++        {loading && !report ? (
++          <p className="muted">{t('Loading…')}</p>
++        ) : !report || report.weatherDays === 0 ? (
++          <p className="muted">
++            {t(
++              'No provider weather has been saved for this run yet. Advance the simulation by a day to start the watch.',
++            )}
++          </p>
++        ) : (
++          <p className="muted">
++            {t('Based on {{days}} days of weather up to {{date}}', {
++              days: report.weatherDays,
++              date: dateLabel(report.asOf!),
++            })}{' '}
++            ·{' '}
++            {elevated.length
++              ? t('{{count}} threats at High or Very high risk', { count: elevated.length })
++              : t('No threats at High risk right now')}
++          </p>
++        )}
++      </section>
++      {report && report.weatherDays > 0 && (
++        <>
++          <div className="threat-grid">
++            {active.map((a) => (
++              <ThreatCard a={a} key={a.threatId} />
++            ))}
++          </div>
++          {inactive.length > 0 && (
++            <section className="card padded table-section">
++              <h2>{t('Not at risk at this growth stage')}</h2>
++              <p className="muted">
++                {t('These threats attack other stages of this crop. Check again as it develops.')}
++              </p>
++              <ul className="threat-inactive">
++                {inactive.map((a) => (
++                  <li key={a.threatId}>
++                    <strong>{threatById.get(a.threatId)!.name}</strong>
++                    <span className="muted">
++                      {t('Susceptible stage')}: {a.window}
++                    </span>
++                  </li>
++                ))}
++              </ul>
++            </section>
++          )}
++        </>
++      )}
++    </>
++  );
++}
+diff --git a/apps/web/src/styles.css b/apps/web/src/styles.css
+index 7bd1eff..521d205 100644
+--- a/apps/web/src/styles.css
++++ b/apps/web/src/styles.css
+@@ -2554,3 +2554,121 @@ ul {
+     padding: 0 12px 14px;
+   }
+ }
++
++/* Crop health */
++.threat-grid {
++  display: grid;
++  grid-template-columns: repeat(2, 1fr);
++  gap: 18px;
++  margin-top: 22px;
++}
++.threat-card {
++  padding: 20px;
++  border-left: 4px solid #b9c7bd;
++}
++.threat-card.level-moderate {
++  border-left-color: #c9a63e;
++}
++.threat-card.level-high {
++  border-left-color: #cf7a36;
++}
++.threat-card.level-very-high {
++  border-left-color: #b8412f;
++}
++.threat-head {
++  display: flex;
++  justify-content: space-between;
++  gap: 12px;
++  align-items: flex-start;
++}
++.threat-head h3 {
++  font-size: 15px;
++  margin: 0 0 3px;
++}
++.threat-risk {
++  display: flex;
++  align-items: center;
++  gap: 12px;
++  margin: 14px 0 8px;
++}
++.threat-risk strong {
++  font-size: 13px;
++  white-space: nowrap;
++}
++.threat-meter {
++  flex: 1;
++  height: 8px;
++  background: #e9eee9;
++  border-radius: 4px;
++  overflow: hidden;
++}
++.threat-meter span {
++  display: block;
++  height: 100%;
++  background: #6e9878;
++  border-radius: 4px;
++}
++.level-moderate .threat-meter span {
++  background: #c9a63e;
++}
++.level-high .threat-meter span {
++  background: #cf7a36;
++}
++.level-very-high .threat-meter span {
++  background: #b8412f;
++}
++.threat-trend {
++  width: 56px;
++  height: 24px;
++  fill: #8aa293;
++  flex-shrink: 0;
++}
++.threat-advice {
++  font-size: 13px;
++  margin: 4px 0 8px;
++}
++.threat-drivers {
++  margin: 0 0 8px;
++  padding-left: 18px;
++  font-size: 12px;
++  color: var(--muted);
++}
++.threat-more {
++  border-top: 1px solid var(--border);
++  padding-top: 10px;
++  font-size: 12px;
++}
++.threat-more summary {
++  cursor: pointer;
++  color: var(--green);
++  display: flex;
++  align-items: center;
++  gap: 6px;
++}
++.threat-more p,
++.threat-more ul {
++  margin: 8px 0;
++  line-height: 1.5;
++}
++.threat-more ul {
++  padding-left: 18px;
++}
++.threat-inactive {
++  list-style: none;
++  padding: 0;
++  margin: 14px 0 0;
++  display: grid;
++  gap: 8px;
++}
++.threat-inactive li {
++  display: flex;
++  justify-content: space-between;
++  gap: 12px;
++  font-size: 13px;
++  flex-wrap: wrap;
++}
++@media (max-width: 900px) {
++  .threat-grid {
++    grid-template-columns: 1fr;
++  }
++}
+diff --git a/apps/web/src/tests/components.test.tsx b/apps/web/src/tests/components.test.tsx
+index 5fceae0..b3d4995 100644
+--- a/apps/web/src/tests/components.test.tsx
++++ b/apps/web/src/tests/components.test.tsx
+@@ -22,6 +22,8 @@ test('moisture labels map root-zone water to bounded available percentage', () =
+ });
+ test('dashboard aggregates plots by area rather than arithmetic mean', () => {
+   const farm = {
++      // legacy model version keeps the reference 0.30 m root zone these expected values assume
++      run: { modelVersion: 'tomato-educational-v1' },
+       plots: [
+         { id: 'a', soil: 'Loam', area: 100 },
+         { id: 'b', soil: 'Loam', area: 900 },
+@@ -39,3 +41,38 @@ test('dashboard aggregates plots by area rather than arithmetic mean', () => {
+   assert.equal(result.water, 40);
+   assert.equal(result.yield, 60);
+ });
++test('crop health cards render risk, drivers, stage and guidance for every threat', async () => {
++  const { ThreatCard } = await import('../components/ThreatCard');
++  const { THREATS, assessPlotThreats, CROP_NAMES } = await import('@agritwin/shared');
++  const day = {
++    date: '2026-08-01',
++    temperature: 25,
++    rain: 6,
++    humidity: 92,
++    carried: false,
++    progress: 0.4,
++    stress: 0.3,
++    saturation: 0,
++  };
++  let rendered = 0;
++  for (const crop of CROP_NAMES) {
++    const series = Array.from({ length: 7 }, () => ({ ...day }));
++    for (const a of assessPlotThreats(crop, series)) {
++      const html = renderToStaticMarkup(<ThreatCard a={a} />);
++      const threat = THREATS.find((t) => t.id === a.threatId)!;
++      assert.ok(html.includes(threat.name.replace(/&/g, '&amp;')), threat.id);
++      assert.match(html, /role="meter"/);
++      assert.match(html, new RegExp(`aria-valuenow="${a.score}"`));
++      assert.ok(html.includes('Symptoms, scouting and management'));
++      rendered++;
++    }
++  }
++  assert.equal(
++    rendered,
++    THREATS.reduce((n, t) => n + Object.keys(t.crops).length, 0),
++  );
++});
++test('local Marathi names are written in Devanagari', async () => {
++  const { THREATS } = await import('@agritwin/shared');
++  for (const t of THREATS) if (t.local) assert.match(t.local, /^[\u0900-\u097F\s]+$/, t.id);
++});
+diff --git a/docs/API.md b/docs/API.md
+index e103166..54e84ac 100644
+--- a/docs/API.md
++++ b/docs/API.md
+@@ -29,6 +29,8 @@ Authentication uses an HTTP-only signed session cookie. Browser requests include
+ | GET | /farms/:id/predictions | Explainable irrigation and crop-state estimates |
+ | GET | /farms/:id/analytics | History, events and archived runs |
+ | POST | /farms/:id/scenarios | Compare two simulated management choices |
++| GET | /farms/:id/threats | Disease and pest risk index for each plot, from saved provider weather and crop stage |
++| GET | /threats?crop=Wheat | Public disease and pest reference library, optionally filtered by crop |
+ 
+ Nested farm routes check ownership. Invalid requests return 400 and an error message; missing or unowned farms return 404. Account limits: 20 farms, 24 plots per farm, 120 days per advance command, 730 days per run, 10 archived runs and 30 scenarios per farm.
+ 
+diff --git a/docs/KNOWN_LIMITATIONS.md b/docs/KNOWN_LIMITATIONS.md
+index b910e45..2bbb93b 100644
+--- a/docs/KNOWN_LIMITATIONS.md
++++ b/docs/KNOWN_LIMITATIONS.md
+@@ -9,6 +9,7 @@
+ - Some technical/help text still falls back to English. Browser speech depends on installed voices.
+ - The backend currently supports one API instance. Runs pause on restart; multi-instance workers require coordination.
+ - Hosted deployment, database migration and end-to-end live sign-in have not been activated from this workspace.
++- Disease and pest risk is a weather- and stage-based index with generalised reference ranges, not a diagnosis, a pest count or a validated forecast. Insect risk is capped because weather alone cannot show population size. Threat names and guidance are in English with Marathi names for only some entries.
+ 
+ New runs do not use generated weather. Legacy saved runs and archives are retained with their original weather provenance; reset a legacy run to start a current model run.
+ 
+diff --git a/docs/MODELING.md b/docs/MODELING.md
+index ecee8c6..770660f 100644
+--- a/docs/MODELING.md
++++ b/docs/MODELING.md
+@@ -28,5 +28,19 @@ Starting water is estimated from a gridded weather-model soil-moisture product w
+ 
+ A scenario compares two branches from a saved farm state using the same weather rows and different user-selected temperature, rainfall or irrigation assumptions. The active run is not changed.
+ 
+-This is a software research prototype. Daily steps omit layered infiltration, nutrients, pests, disease, cultivar detail, and field-scale spatial variation. No agronomic validation or prediction-accuracy claim is made.
++This is a software research prototype. Daily steps omit layered infiltration, nutrients, cultivar detail, and field-scale spatial variation. Disease and pest risk is reported separately as a weather-driven index (see below); it does not feed back into simulated growth or yield. No agronomic validation or prediction-accuracy claim is made.
+ 
++
++## Crop health (disease and pest risk index)
++
++`packages/shared/src/threats.ts` holds a reference library of 40 Maharashtra diseases and pests covering all 12 crop profiles (each crop has at least one disease and one pest). Each entry records the susceptible crop stage, the temperature and humidity range that favours it, whether wet or dry weather favours it, symptoms, a scouting method and integrated pest management steps.
++
++For each plot the API reads up to 14 days of saved provider weather and the plot's modelled crop stage, water stress and soil saturation. Each day's favourability is a temperature trapezoid combined with humidity and recent rain (wet-weather threats) or dryness (dry-weather pests and vectors). The last 7 days are averaged with recent days weighted more, multiplied by a stage factor that is zero outside the susceptible window, then scaled by water stress (for example charcoal rot, dry root rot, aflatoxin) and waterlogging (Phytophthora blight, red rot) where those matter. The result is a 0–100 index: Low below 25, Moderate to 49, High to 69, Very high from 70.
++
++What the index is and is not:
++
++- It is a **risk index**, not a diagnosis. It does not count pests or confirm infection.
++- Daily regional weather replaces in-field leaf wetness, so humidity and rain are proxies.
++- Weather cannot show insect numbers, so population-driven threats are capped: temperature-only insects at Moderate and weather-linked insects and vector-borne viruses at High. Reaching Very high for these requires scouting or trap counts, which the prototype does not yet record.
++- Generated (synthetic) weather is never used. Carried-forward days are counted and disclosed, and fewer than 3 weather days is labelled indicative.
++- Temperature, humidity and stage ranges are generalised reference values from standard crop-protection literature. They have not been calibrated against Maharashtra outbreak records, and local names and management steps should be reviewed by a KVK or state agricultural university officer before use. The library gives integrated pest management steps and does not recommend pesticide products or doses.
+diff --git a/docs/ROADMAP.md b/docs/ROADMAP.md
+new file mode 100644
+index 0000000..ca6a8e8
+--- /dev/null
++++ b/docs/ROADMAP.md
+@@ -0,0 +1,28 @@
++# Roadmap: features that set AgriTwin apart
++
++Ordered by how much each one strengthens the idea of a *digital twin* (a model that stays tied to the real field) rather than a one-off simulator.
++
++## 1. Disease and pest risk watch — implemented
++
++Weather- and stage-driven risk index for 40 Maharashtra diseases and pests across all 12 crops, with symptoms, scouting steps and integrated pest management guidance. See docs/MODELING.md.
++
++## 2. Satellite calibration (NDVI data assimilation)
++
++Pull free Sentinel-2 imagery for the farm boundary already saved in the app, compute NDVI per plot every 5 to 10 days, and compare it with the simulated leaf area. When they disagree, nudge the model state toward the observation. This turns the current "unvalidated prototype" limitation into a measured error, and it works without any sensors on the farm. It also gives the schematic 3D view a real-data overlay.
++
++## 3. Photo scouting log with a village outbreak map
++
++Let a farmer photograph a leaf and record what they found (confirmed by a KVK officer or by the farmer). Store it with date, plot and threat. Use confirmed reports to (a) show a "seen nearby this week" badge on the risk cards and (b) calibrate the thresholds in threats.ts against real outbreaks, replacing today's generalised ranges. An image classifier can suggest a candidate, but the farmer's or officer's confirmation should be the stored label. Scouting counts would also let insect risk rise above its weather-only cap.
++
++## 4. Marathi voice and WhatsApp advisory
++
++Send a short daily message in Marathi: irrigate or not, any High risk threat and what to scout. The app already has Marathi and Hindi text and browser speech; this moves the advice to where farmers already are. Voice notes help farmers who prefer not to read.
++
++## 5. Season and sowing-date planner
++
++Reuse the existing engine to run every supported crop across a range of sowing dates using historical weather, then rank by modelled yield, irrigation water, disease risk exposure and profit using the mandi prices and cost inputs already in the app. Presents "what should I plant, and when" before the season starts, using only parts of the system that already exist.
++
++## Also worth considering
++
++- Soil Health Card nutrient planner (nitrogen, phosphorus, potassium) to add the nutrient dimension the model currently omits.
++- Crop-insurance evidence report: a dated record of weather, stress and scouting that supports a claim.
+diff --git a/packages/shared/src/index.ts b/packages/shared/src/index.ts
+index 9da64c9..aaf695b 100644
+--- a/packages/shared/src/index.ts
++++ b/packages/shared/src/index.ts
+@@ -2,6 +2,7 @@ import { z } from 'zod';
+ import { CROP_NAMES } from './crops';
+ export * from './crops';
+ export * from './lifecycle';
++export * from './threats';
+ export const MODEL_VERSION = 'agritwin-maharashtra-v3';
+ export const soilSchema = z.enum(['Loam', 'Sandy', 'Clay']);
+ export type Soil = z.infer<typeof soilSchema>;
+diff --git a/packages/shared/src/threats.ts b/packages/shared/src/threats.ts
+new file mode 100644
+index 0000000..29c3874
+--- /dev/null
++++ b/packages/shared/src/threats.ts
+@@ -0,0 +1,1031 @@
++import { CROPS, cropStage, type CropName } from './crops';
++
++/*
++ * Crop health knowledge base and risk model.
++ *
++ * IMPORTANT: this is a weather-and-stage RISK INDEX, not a diagnosis and not a
++ * count of pests or infected plants. It estimates how favourable recent weather
++ * and the crop's current growth stage are for each threat, using generalised
++ * epidemiological ranges (temperature, humidity, rain, stress). Ranges are
++ * reference assumptions drawn from standard crop-protection literature and must
++ * be reviewed by a local agronomist (KVK / state agricultural university) before
++ * being used for spray decisions. Daily weather is regional provider data, not
++ * in-field leaf-wetness, so humidity and rain are proxies.
++ */
++
++export type ThreatKind = 'fungal' | 'bacterial' | 'viral' | 'insect';
++export type RiskLevel = 'Low' | 'Moderate' | 'High' | 'Very high';
++export type WeatherMode = 'wet' | 'dry' | 'neutral';
++
++export type Threat = {
++  id: string;
++  name: string;
++  scientific: string;
++  /** Marathi name, only where well established; otherwise omitted. */
++  local?: string;
++  kind: ThreatKind;
++  /** crop → susceptible window as a fraction (0–1) of the crop's maturity GDD */
++  crops: Partial<Record<CropName, [number, number]>>;
++  /** mean daily air temperature (°C): 0 favourability at min/max, 1 between optLow and optHigh */
++  temp: { min: number; optLow: number; optHigh: number; max: number };
++  /** mean daily relative humidity (%): 0 at min, 1 at full */
++  humidity?: { min: number; full: number };
++  /** wet: humid, rainy weather favours it. dry: warm, dry weather favours it. neutral: temperature only. */
++  mode: WeatherMode;
++  /** extra risk multiplier per unit of modelled water stress (0–1) */
++  stressBoost?: number;
++  /** extra risk when the root zone is above field capacity */
++  waterlogging?: boolean;
++  /** spread by an insect vector, so weather alone cannot show how much is present */
++  vectorBorne?: boolean;
++  symptoms: string;
++  scouting: string;
++  management: string[];
++};
++
++const IPM_NOTE =
++  'Spray only when scouting counts reach the economic threshold set by your state agricultural university, and only products registered for this crop; follow the label.';
++
++export const THREATS: Threat[] = [
++  /* ---------------- Wheat ---------------- */
++  {
++    id: 'wheat-leaf-rust',
++    name: 'Wheat leaf (brown) rust',
++    scientific: 'Puccinia triticina',
++    local: 'तांबेरा',
++    kind: 'fungal',
++    crops: { Wheat: [0.2, 0.85] },
++    temp: { min: 8, optLow: 15, optHigh: 22, max: 30 },
++    humidity: { min: 60, full: 85 },
++    mode: 'wet',
++    symptoms:
++      'Small round orange-brown pustules scattered on the upper leaf surface that rub off as powder.',
++    scouting:
++      'Check 20 plants along a diagonal; look at flag leaf and the leaf below it. Note the percentage of leaf area covered.',
++    management: [
++      'Grow rust-resistant, locally recommended varieties and avoid a single variety over large areas.',
++      'Avoid late sowing and excess nitrogen, which keep the canopy soft and humid.',
++      'Destroy volunteer wheat and self-sown plants before the season.',
++      IPM_NOTE,
++    ],
++  },
++  {
++    id: 'wheat-powdery-mildew',
++    name: 'Wheat powdery mildew',
++    scientific: 'Blumeria graminis f. sp. tritici',
++    local: 'भुरी',
++    kind: 'fungal',
++    crops: { Wheat: [0.15, 0.7] },
++    temp: { min: 8, optLow: 15, optHigh: 22, max: 27 },
++    humidity: { min: 70, full: 90 },
++    mode: 'wet',
++    symptoms:
++      'White powdery colonies on lower leaves and sheaths that spread upward; tissue yellows beneath.',
++    scouting: 'Inspect lower leaves of dense, well-fertilised patches first.',
++    management: [
++      'Use tolerant varieties and keep seed rate and nitrogen moderate to avoid dense canopies.',
++      'Remove infected volunteer plants and crop residue.',
++      IPM_NOTE,
++    ],
++  },
++  {
++    id: 'wheat-aphid',
++    name: 'Wheat aphids',
++    scientific: 'Sitobion avenae, Rhopalosiphum maidis',
++    kind: 'insect',
++    crops: { Wheat: [0.5, 0.85] },
++    temp: { min: 8, optLow: 15, optHigh: 25, max: 32 },
++    mode: 'neutral',
++    symptoms:
++      'Colonies of small green or dark insects on ear heads and flag leaves; sticky honeydew and sooty mould.',
++    scouting:
++      'Count aphids on ear heads of 20 tillers at heading to milk stage; check for natural enemies such as ladybirds.',
++    management: [
++      'Conserve ladybird beetles and hoverflies; avoid broad-spectrum sprays that kill them.',
++      'Avoid excess nitrogen.',
++      IPM_NOTE,
++    ],
++  },
++
++  /* ---------------- Maize ---------------- */
++  {
++    id: 'maize-fall-armyworm',
++    name: 'Fall armyworm',
++    scientific: 'Spodoptera frugiperda',
++    local: 'लष्करी अळी',
++    kind: 'insect',
++    crops: { Maize: [0.03, 0.65] },
++    temp: { min: 15, optLow: 24, optHigh: 32, max: 38 },
++    mode: 'dry',
++    symptoms:
++      'Ragged window-pane feeding on young leaves, then shot-holes; sawdust-like frass inside the whorl.',
++    scouting:
++      'Check 5 plants at each of 10 spots. Look in the whorl for larvae and fresh frass; use pheromone traps for moth catches.',
++    management: [
++      'Sow on time and in one block with neighbours so plants are at the same stage.',
++      'Install pheromone traps for early warning and hand-pick egg masses and young larvae.',
++      'Biopesticides (for example neem-based or NPV products) work best on small larvae.',
++      IPM_NOTE,
++    ],
++  },
++  {
++    id: 'maize-turcicum-blight',
++    name: 'Turcicum leaf blight',
++    scientific: 'Exserohilum turcicum',
++    local: 'करपा',
++    kind: 'fungal',
++    crops: { Maize: [0.2, 0.85] },
++    temp: { min: 14, optLow: 18, optHigh: 27, max: 31 },
++    humidity: { min: 70, full: 90 },
++    mode: 'wet',
++    symptoms:
++      'Long cigar-shaped grey-green to tan lesions on leaves, starting on lower leaves and moving up.',
++    scouting:
++      'Look at the ear leaf and the leaves above and below it; note how many plants have lesions above the ear.',
++    management: [
++      'Plant resistant or tolerant hybrids and rotate away from maize.',
++      'Bury or remove infected crop residue after harvest.',
++      'Keep plant population and nitrogen balanced to avoid prolonged leaf wetness.',
++      IPM_NOTE,
++    ],
++  },
++  {
++    id: 'maize-stem-borer',
++    name: 'Maize stem borer',
++    scientific: 'Chilo partellus',
++    kind: 'insect',
++    crops: { Maize: [0.05, 0.5] },
++    temp: { min: 18, optLow: 25, optHigh: 30, max: 36 },
++    mode: 'neutral',
++    symptoms: 'Pin-hole damage on leaves, dead heart in young plants, tunnelling in stems.',
++    scouting: 'Count plants with shot-hole damage or dead heart in 10 rows of 5 m.',
++    management: [
++      'Remove and destroy stubble after harvest.',
++      'Release Trichogramma egg parasitoids where recommended and use pheromone traps for monitoring.',
++      IPM_NOTE,
++    ],
++  },
++
++  /* ---------------- Tomato ---------------- */
++  {
++    id: 'tomato-early-blight',
++    name: 'Tomato early blight',
++    scientific: 'Alternaria solani',
++    kind: 'fungal',
++    crops: { Tomato: [0.1, 0.8] },
++    temp: { min: 14, optLow: 24, optHigh: 29, max: 35 },
++    humidity: { min: 70, full: 90 },
++    mode: 'wet',
++    symptoms:
++      'Dark brown spots with concentric rings (target-board pattern) on older leaves, then stems and fruit shoulders.',
++    scouting: 'Check the oldest leaves first, every 3–4 days when weather is humid.',
++    management: [
++      'Rotate with non-solanaceous crops and use clean seedlings.',
++      'Stake plants, avoid overhead irrigation and remove infected lower leaves.',
++      'Mulch to reduce soil splash.',
++      IPM_NOTE,
++    ],
++  },
++  {
++    id: 'tomato-late-blight',
++    name: 'Tomato late blight',
++    scientific: 'Phytophthora infestans',
++    kind: 'fungal',
++    crops: { Tomato: [0.1, 0.8] },
++    temp: { min: 8, optLow: 12, optHigh: 22, max: 26 },
++    humidity: { min: 85, full: 95 },
++    mode: 'wet',
++    symptoms:
++      'Large greasy water-soaked patches on leaves that turn brown; white growth underneath in humid air; firm brown rot on fruit.',
++    scouting:
++      'Look after cool, cloudy, drizzly spells. It can spread across the field in a few days.',
++    management: [
++      'Use certified seedlings and avoid planting near potato.',
++      'Improve airflow and drainage; irrigate in the morning, not the evening.',
++      'Remove and destroy infected plants early.',
++      IPM_NOTE,
++    ],
++  },
++  {
++    id: 'tomato-leaf-curl',
++    name: 'Tomato leaf curl virus (whitefly-spread)',
++    scientific: 'Begomovirus; vector Bemisia tabaci',
++    kind: 'viral',
++    vectorBorne: true,
++    crops: { Tomato: [0.02, 0.45] },
++    temp: { min: 20, optLow: 27, optHigh: 33, max: 38 },
++    mode: 'dry',
++    stressBoost: 0.4,
++    symptoms: 'Upward curling and crinkling of leaves, stunted bushy plants, flowers drop.',
++    scouting:
++      'Use yellow sticky traps; count whiteflies on the underside of young leaves. Rogue out curled plants early.',
++    management: [
++      'Raise seedlings under insect-proof net and use resistant or tolerant hybrids.',
++      'Use yellow sticky traps and border crops; remove infected plants and weeds that host whitefly.',
++      'Reflective mulch can reduce early whitefly landing.',
++      IPM_NOTE,
++    ],
++  },
++  {
++    id: 'tomato-fruit-borer',
++    name: 'Tomato fruit borer',
++    scientific: 'Helicoverpa armigera',
++    local: 'घाटेअळी',
++    kind: 'insect',
++    crops: { Tomato: [0.23, 0.75] },
++    temp: { min: 15, optLow: 25, optHigh: 32, max: 38 },
++    mode: 'neutral',
++    symptoms: 'Round entry holes in green fruit, hollowed fruit with frass, caterpillars inside.',
++    scouting: 'Use pheromone traps; count eggs and larvae on 20 plants; inspect fruit clusters.',
++    management: [
++      'Grow trap crops such as marigold around the field and use pheromone traps.',
++      'Collect and destroy damaged fruit; hand-pick larvae.',
++      'HaNPV and Bt-based products target young larvae.',
++      IPM_NOTE,
++    ],
++  },
++
++  /* ---------------- Soybean ---------------- */
++  {
++    id: 'soybean-rust',
++    name: 'Soybean rust',
++    scientific: 'Phakopsora pachyrhizi',
++    local: 'तांबेरा',
++    kind: 'fungal',
++    crops: { Soybean: [0.35, 0.9] },
++    temp: { min: 10, optLow: 18, optHigh: 26, max: 30 },
++    humidity: { min: 75, full: 90 },
++    mode: 'wet',
++    symptoms:
++      'Tiny tan to reddish-brown lesions on the underside of leaves with raised pustules; early leaf yellowing and drop.',
++    scouting:
++      'Look at the lower leaves from flowering onward, especially after long wet, cloudy spells.',
++    management: [
++      'Sow tolerant varieties on time; avoid very late sowing.',
++      'Scout from flowering and remove volunteer soybean.',
++      IPM_NOTE,
++    ],
++  },
++  {
++    id: 'soybean-ymv',
++    name: 'Soybean yellow mosaic (whitefly-spread)',
++    scientific: 'Mungbean yellow mosaic India virus; vector Bemisia tabaci',
++    kind: 'viral',
++    vectorBorne: true,
++    crops: { Soybean: [0.03, 0.5] },
++    temp: { min: 20, optLow: 27, optHigh: 33, max: 38 },
++    mode: 'dry',
++    stressBoost: 0.3,
++    symptoms: 'Bright yellow patches among green areas on leaves, reduced pod set.',
++    scouting:
++      'Use yellow sticky traps; walk the field in the first 5 weeks and uproot infected plants.',
++    management: [
++      'Use resistant varieties and certified seed; control weeds that host whitefly.',
++      'Rogue out infected seedlings early.',
++      IPM_NOTE,
++    ],
++  },
++  {
++    id: 'soybean-girdle-beetle',
++    name: 'Girdle beetle',
++    scientific: 'Oberea brevis',
++    local: 'चक्रभुंगा',
++    kind: 'insect',
++    crops: { Soybean: [0.15, 0.6] },
++    temp: { min: 20, optLow: 24, optHigh: 30, max: 35 },
++    humidity: { min: 60, full: 85 },
++    mode: 'wet',
++    symptoms: 'Two parallel rings cut around the stem or petiole; upper part wilts and dries.',
++    scouting: 'Count girdled plants and petioles in 10 spots; start 3–4 weeks after sowing.',
++    management: [
++      'Sow at the recommended time and keep the field weed-free.',
++      'Remove and destroy girdled parts, and destroy stubble after harvest.',
++      IPM_NOTE,
++    ],
++  },
++
++  /* ---------------- Cotton ---------------- */
++  {
++    id: 'cotton-pink-bollworm',
++    name: 'Pink bollworm',
++    scientific: 'Pectinophora gossypiella',
++    local: 'गुलाबी बोंडअळी',
++    kind: 'insect',
++    crops: { Cotton: [0.4, 0.95] },
++    temp: { min: 18, optLow: 25, optHigh: 32, max: 37 },
++    mode: 'neutral',
++    symptoms:
++      'Rosette flowers, tiny entry holes in green bolls, damaged and stained lint, larvae inside seeds.',
++    scouting:
++      'Use pheromone traps from squaring; cut open 20 green bolls per plot each week and note live larvae.',
++    management: [
++      'Sow within the recommended window and avoid long-duration crops that keep bolls through winter.',
++      'Install pheromone traps in every field for early warning.',
++      'Destroy crop residue and stalks after the final picking; avoid ratooning.',
++      IPM_NOTE,
++    ],
++  },
++  {
++    id: 'cotton-sucking-pests',
++    name: 'Cotton sucking pests (jassid, aphid, whitefly, thrips)',
++    scientific: 'Amrasca biguttula, Aphis gossypii, Bemisia tabaci',
++    local: 'तुडतुडे',
++    kind: 'insect',
++    crops: { Cotton: [0.03, 0.6] },
++    temp: { min: 18, optLow: 25, optHigh: 32, max: 38 },
++    mode: 'dry',
++    stressBoost: 0.5,
++    symptoms:
++      'Leaf edges curling and reddening (jassid), sticky honeydew (aphid, whitefly), silvery leaf patches (thrips).',
++    scouting:
++      'Count jassids and whiteflies on 3 leaves per plant from 20 plants. Use yellow sticky traps.',
++    management: [
++      'Avoid excess nitrogen and keep plants well watered, because stressed plants are more attractive.',
++      'Conserve natural enemies; use neem-based products early.',
++      IPM_NOTE,
++    ],
++  },
++  {
++    id: 'cotton-bacterial-blight',
++    name: 'Cotton bacterial blight',
++    scientific: 'Xanthomonas citri pv. malvacearum',
++    kind: 'bacterial',
++    crops: { Cotton: [0.1, 0.7] },
++    temp: { min: 20, optLow: 26, optHigh: 32, max: 38 },
++    humidity: { min: 70, full: 90 },
++    mode: 'wet',
++    symptoms: 'Angular, water-soaked leaf spots bounded by veins; black arm on stems; boll rot.',
++    scouting: 'Check after rain with wind; look for angular leaf spots and boll lesions.',
++    management: [
++      'Use delinted, treated seed and resistant varieties.',
++      'Avoid working in wet fields and remove infected residue.',
++      IPM_NOTE,
++    ],
++  },
++
++  /* ---------------- Tur (pigeonpea) ---------------- */
++  {
++    id: 'tur-pod-borer',
++    name: 'Pod borer (Helicoverpa)',
++    scientific: 'Helicoverpa armigera',
++    local: 'घाटेअळी',
++    kind: 'insect',
++    crops: { Tur: [0.4, 0.85] },
++    temp: { min: 15, optLow: 25, optHigh: 32, max: 38 },
++    mode: 'neutral',
++    symptoms:
++      'Larvae feeding on buds, flowers and developing pods; round holes in pods, grain eaten.',
++    scouting: 'Pheromone traps from flowering; count larvae on 20 plants and inspect pods.',
++    management: [
++      'Grow intercrops and trap crops; install bird perches to attract predatory birds.',
++      'HaNPV or neem seed kernel extract on young larvae.',
++      IPM_NOTE,
++    ],
++  },
++  {
++    id: 'tur-fusarium-wilt',
++    name: 'Tur wilt',
++    scientific: 'Fusarium udum',
++    local: 'मर',
++    kind: 'fungal',
++    crops: { Tur: [0.1, 0.9] },
++    temp: { min: 18, optLow: 25, optHigh: 30, max: 36 },
++    mode: 'neutral',
++    stressBoost: 0.5,
++    symptoms:
++      'Sudden yellowing and wilting of plants, often in patches; brown to purple streaks in the stem and blackened roots when split.',
++    scouting:
++      'Walk the field at flowering; split stems of wilting plants to check for dark vascular streaks.',
++    management: [
++      'Use wilt-resistant varieties, the single most effective measure.',
++      'Treat seed with Trichoderma or a recommended fungicide; rotate with cereals such as sorghum.',
++      'Avoid replanting tur in the same field year after year.',
++    ],
++  },
++  {
++    id: 'tur-phytophthora-blight',
++    name: 'Tur Phytophthora blight',
++    scientific: 'Phytophthora cajani',
++    kind: 'fungal',
++    crops: { Tur: [0.03, 0.5] },
++    temp: { min: 20, optLow: 25, optHigh: 30, max: 35 },
++    humidity: { min: 80, full: 95 },
++    mode: 'wet',
++    waterlogging: true,
++    symptoms:
++      'Water-soaked lesions on stems and branches; plants collapse in poorly drained patches after heavy rain.',
++    scouting: 'Inspect low-lying, waterlogged patches after heavy rain.',
++    management: [
++      'Grow on ridges or raised beds and improve field drainage.',
++      'Use tolerant varieties and treat seed with a recommended fungicide.',
++    ],
++  },
++
++  /* ---------------- Jowar (sorghum) ---------------- */
++  {
++    id: 'jowar-shoot-fly',
++    name: 'Sorghum shoot fly',
++    scientific: 'Atherigona soccata',
++    local: 'खोड माशी',
++    kind: 'insect',
++    crops: { Jowar: [0.02, 0.25] },
++    temp: { min: 18, optLow: 22, optHigh: 30, max: 35 },
++    humidity: { min: 60, full: 80 },
++    mode: 'wet',
++    symptoms: 'Central shoot dries (dead heart) in seedlings; side tillers may follow.',
++    scouting: 'Count dead hearts in 10 spots at 2–4 weeks after emergence.',
++    management: [
++      'Sow early with the onset of rains; late sowing greatly raises damage.',
++      'Use a higher seed rate and thin later; use tolerant varieties.',
++      IPM_NOTE,
++    ],
++  },
++  {
++    id: 'jowar-grain-mould',
++    name: 'Sorghum grain mould',
++    scientific: 'Fusarium, Curvularia and other fungi',
++    kind: 'fungal',
++    crops: { Jowar: [0.5, 0.95] },
++    temp: { min: 18, optLow: 25, optHigh: 30, max: 35 },
++    humidity: { min: 80, full: 92 },
++    mode: 'wet',
++    symptoms: 'Pink, grey or black discolouration of grain in the ear head; light, soft grain.',
++    scouting: 'Check ear heads after rain during flowering and grain filling.',
++    management: [
++      'Choose early or medium varieties so grain filling avoids the rainy period.',
++      'Use varieties with open or compact heads recommended for your area; harvest at maturity and dry grain well.',
++    ],
++  },
++  {
++    id: 'jowar-charcoal-rot',
++    name: 'Sorghum charcoal rot',
++    scientific: 'Macrophomina phaseolina',
++    kind: 'fungal',
++    crops: { Jowar: [0.45, 0.95] },
++    temp: { min: 26, optLow: 30, optHigh: 38, max: 42 },
++    mode: 'dry',
++    stressBoost: 1.0,
++    symptoms: 'Plants lodge before maturity; split stalks show shredded pith with black specks.',
++    scouting: 'Push stalks at grain filling; split lodged stalks and look for black specks.',
++    management: [
++      'Avoid moisture stress at grain filling; conserve soil moisture, especially in rabi sorghum.',
++      'Moderate plant density and nitrogen; use tolerant varieties; rotate crops.',
++    ],
++  },
++
++  /* ---------------- Bajra (pearl millet) ---------------- */
++  {
++    id: 'bajra-downy-mildew',
++    name: 'Pearl millet downy mildew',
++    scientific: 'Sclerospora graminicola',
++    local: 'केवडा',
++    kind: 'fungal',
++    crops: { Bajra: [0.02, 0.35] },
++    temp: { min: 15, optLow: 20, optHigh: 26, max: 32 },
++    humidity: { min: 80, full: 95 },
++    mode: 'wet',
++    symptoms:
++      'Pale, yellow streaks on leaves with white downy growth underneath in humid air; ear heads become leafy.',
++    scouting:
++      'Check seedlings at 2–5 weeks; uproot affected plants before white growth turns to spores.',
++    management: [
++      'Use resistant hybrids and treat seed with a recommended fungicide.',
++      'Uproot and bury affected seedlings early; rotate crops.',
++    ],
++  },
++  {
++    id: 'bajra-ergot',
++    name: 'Pearl millet ergot',
++    scientific: 'Claviceps fusiformis',
++    local: 'अरगट',
++    kind: 'fungal',
++    crops: { Bajra: [0.5, 0.75] },
++    temp: { min: 15, optLow: 20, optHigh: 28, max: 32 },
++    humidity: { min: 80, full: 95 },
++    mode: 'wet',
++    symptoms:
++      'Sticky honeydew droplets on ear heads, later dark hard sclerotia replacing grain. Toxic if eaten.',
++    scouting: 'Look for honeydew on ear heads during flowering in cool, humid, cloudy weather.',
++    management: [
++      'Sow on time so flowering avoids prolonged cool, humid weather.',
++      'Use tolerant hybrids and treat seed by salt flotation to remove ergot bodies.',
++    ],
++  },
++
++  {
++    id: 'bajra-stem-borer',
++    name: 'Pearl millet stem borer',
++    scientific: 'Chilo partellus',
++    kind: 'insect',
++    crops: { Bajra: [0.05, 0.5] },
++    temp: { min: 18, optLow: 25, optHigh: 30, max: 36 },
++    mode: 'neutral',
++    symptoms: 'Pin-hole damage on leaves, dead heart in young plants and tunnelling inside stems.',
++    scouting:
++      'Count plants with shot-hole damage or dead heart in 10 spots, 2–5 weeks after emergence.',
++    management: [
++      'Sow on time, remove and destroy stubble after harvest.',
++      'Release Trichogramma egg parasitoids where recommended.',
++      IPM_NOTE,
++    ],
++  },
++  {
++    id: 'bajra-earhead-caterpillar',
++    name: 'Pearl millet earhead caterpillars',
++    scientific: 'Helicoverpa armigera, Eublemma spp.',
++    local: 'घाटेअळी',
++    kind: 'insect',
++    crops: { Bajra: [0.5, 0.85] },
++    temp: { min: 18, optLow: 25, optHigh: 32, max: 38 },
++    mode: 'neutral',
++    symptoms: 'Caterpillars and webbing on the ear head; grain eaten and ears look ragged.',
++    scouting: 'Inspect 20 ear heads at flowering and early grain fill for caterpillars and frass.',
++    management: [
++      'Sow in a tight window so ear heads in the area emerge together.',
++      'Encourage birds and natural enemies; hand-pick on small plots.',
++      IPM_NOTE,
++    ],
++  },
++
++  /* ---------------- Gram (chickpea) ---------------- */
++  {
++    id: 'gram-pod-borer',
++    name: 'Gram pod borer',
++    scientific: 'Helicoverpa armigera',
++    local: 'घाटेअळी',
++    kind: 'insect',
++    crops: { Gram: [0.35, 0.9] },
++    temp: { min: 12, optLow: 22, optHigh: 30, max: 36 },
++    mode: 'neutral',
++    symptoms: 'Larvae feed on leaves, then bore holes in pods and eat developing grains.',
++    scouting: 'Pheromone traps from flowering; count larvae on 20 plants.',
++    management: [
++      'Install bird perches and pheromone traps; use intercrops such as coriander.',
++      'HaNPV on young larvae; hand-pick where infestation is light.',
++      IPM_NOTE,
++    ],
++  },
++  {
++    id: 'gram-fusarium-wilt',
++    name: 'Chickpea wilt',
++    scientific: 'Fusarium oxysporum f. sp. ciceris',
++    local: 'मर',
++    kind: 'fungal',
++    crops: { Gram: [0.05, 0.7] },
++    temp: { min: 15, optLow: 22, optHigh: 30, max: 35 },
++    mode: 'neutral',
++    stressBoost: 0.4,
++    symptoms:
++      'Drooping and yellowing of seedlings or plants in patches; vascular tissue turns dark when the stem is split.',
++    scouting: 'Look in patches at seedling stage and flowering; split stems of wilting plants.',
++    management: [
++      'Use wilt-resistant varieties, the most reliable control.',
++      'Treat seed with Trichoderma or a recommended fungicide; rotate with cereals.',
++      'Avoid sowing too early into warm soil.',
++    ],
++  },
++  {
++    id: 'gram-dry-root-rot',
++    name: 'Chickpea dry root rot',
++    scientific: 'Rhizoctonia bataticola (Macrophomina phaseolina)',
++    kind: 'fungal',
++    crops: { Gram: [0.35, 0.9] },
++    temp: { min: 26, optLow: 30, optHigh: 38, max: 42 },
++    mode: 'dry',
++    stressBoost: 1.0,
++    symptoms: 'Plants dry up suddenly at pod stage; tap root is brittle with tiny black sclerotia.',
++    scouting:
++      'Look for straw-coloured drying plants at flowering to podding and pull a few to check the roots.',
++    management: [
++      'Avoid late-season moisture stress and high temperature by sowing at the recommended time.',
++      'Treat seed with Trichoderma or a recommended fungicide; rotate crops.',
++    ],
++  },
++
++  /* ---------------- Rice ---------------- */
++  {
++    id: 'rice-blast',
++    name: 'Rice blast',
++    scientific: 'Magnaporthe oryzae',
++    local: 'करपा',
++    kind: 'fungal',
++    crops: { Rice: [0.05, 0.75] },
++    temp: { min: 15, optLow: 22, optHigh: 28, max: 32 },
++    humidity: { min: 85, full: 95 },
++    mode: 'wet',
++    symptoms:
++      'Diamond-shaped grey-centred leaf spots; neck of the panicle turns dark and breaks (neck blast).',
++    scouting:
++      'Check nursery and tillering fields in cool, cloudy, humid weather; check panicle necks at heading.',
++    management: [
++      'Use resistant varieties and treat seed.',
++      'Split nitrogen into smaller doses; excess nitrogen makes plants more susceptible.',
++      'Avoid dense planting and keep bunds free of grass weeds.',
++      IPM_NOTE,
++    ],
++  },
++  {
++    id: 'rice-bacterial-blight',
++    name: 'Rice bacterial leaf blight',
++    scientific: 'Xanthomonas oryzae pv. oryzae',
++    kind: 'bacterial',
++    crops: { Rice: [0.15, 0.75] },
++    temp: { min: 20, optLow: 26, optHigh: 32, max: 36 },
++    humidity: { min: 70, full: 90 },
++    mode: 'wet',
++    symptoms:
++      'Yellow to straw-coloured stripes along leaf edges that dry out; bacterial ooze in the morning.',
++    scouting: 'Check fields after heavy rain and wind; look for wavy yellow leaf margins.',
++    management: [
++      'Use resistant varieties and healthy seed.',
++      'Drain affected fields temporarily and avoid excess nitrogen.',
++      'Avoid flooding fields from infected neighbouring plots.',
++    ],
++  },
++  {
++    id: 'rice-planthopper',
++    name: 'Brown planthopper',
++    scientific: 'Nilaparvata lugens',
++    local: 'तुडतुडे',
++    kind: 'insect',
++    crops: { Rice: [0.3, 0.85] },
++    temp: { min: 18, optLow: 25, optHigh: 30, max: 34 },
++    humidity: { min: 70, full: 85 },
++    mode: 'wet',
++    symptoms:
++      'Circular patches of yellowing then drying plants (hopper burn), insects clustered at the base of tillers.',
++    scouting: 'Tap tillers over a tray or board; count hoppers per hill at the base of plants.',
++    management: [
++      'Avoid excess nitrogen and very close planting; leave wider alleys every few metres.',
++      'Drain the field briefly if hoppers build up; avoid early broad-spectrum sprays that kill spiders and mirid bugs.',
++      IPM_NOTE,
++    ],
++  },
++  {
++    id: 'rice-stem-borer',
++    name: 'Yellow stem borer',
++    scientific: 'Scirpophaga incertulas',
++    local: 'खोडकिडा',
++    kind: 'insect',
++    crops: { Rice: [0.1, 0.7] },
++    temp: { min: 18, optLow: 25, optHigh: 30, max: 34 },
++    mode: 'neutral',
++    symptoms: 'Dead hearts in the vegetative stage and white ear heads at flowering.',
++    scouting: 'Count dead hearts and egg masses on leaf tips; use pheromone traps.',
++    management: [
++      'Clip seedling tips at transplanting to remove egg masses.',
++      'Release Trichogramma egg parasitoids where recommended; destroy stubble.',
++      IPM_NOTE,
++    ],
++  },
++
++  /* ---------------- Groundnut ---------------- */
++  {
++    id: 'groundnut-leaf-spot',
++    name: 'Groundnut early and late leaf spot (tikka)',
++    scientific: 'Cercospora arachidicola, Nothopassalora personata',
++    local: 'टिक्का',
++    kind: 'fungal',
++    crops: { Groundnut: [0.2, 0.95] },
++    temp: { min: 18, optLow: 25, optHigh: 30, max: 34 },
++    humidity: { min: 80, full: 92 },
++    mode: 'wet',
++    symptoms: 'Brown to black round spots with yellow halos on leaves, defoliation, weak pegs.',
++    scouting: 'Check 20 plants for spots per leaf; start at 3–4 weeks after sowing.',
++    management: [
++      'Use tolerant varieties and rotate with cereals.',
++      'Destroy residue and volunteer groundnut; avoid very dense stands.',
++      IPM_NOTE,
++    ],
++  },
++  {
++    id: 'groundnut-rust',
++    name: 'Groundnut rust',
++    scientific: 'Puccinia arachidis',
++    local: 'तांबेरा',
++    kind: 'fungal',
++    crops: { Groundnut: [0.3, 0.95] },
++    temp: { min: 18, optLow: 22, optHigh: 28, max: 32 },
++    humidity: { min: 80, full: 92 },
++    mode: 'wet',
++    symptoms:
++      'Small orange pustules mostly on the underside of leaves that burst to release rusty powder.',
++    scouting: 'Check the underside of leaves; spreads quickly in cloudy, humid weather.',
++    management: ['Use tolerant varieties and remove volunteer plants.', IPM_NOTE],
++  },
++  {
++    id: 'groundnut-spodoptera',
++    name: 'Tobacco caterpillar',
++    scientific: 'Spodoptera litura',
++    kind: 'insect',
++    crops: { Groundnut: [0.05, 0.7] },
++    temp: { min: 18, optLow: 25, optHigh: 32, max: 38 },
++    mode: 'dry',
++    symptoms: 'Egg masses covered in brown hairs on leaves, larvae skeletonise leaves at night.',
++    scouting: 'Use pheromone traps; inspect plants for egg masses and young larvae in the evening.',
++    management: [
++      'Collect and destroy egg masses and young larval clusters by hand.',
++      'Grow castor as a trap crop on borders; use SlNPV or neem-based products on young larvae.',
++      IPM_NOTE,
++    ],
++  },
++  {
++    id: 'groundnut-aflatoxin',
++    name: 'Groundnut aflatoxin (Aspergillus flavus) risk',
++    scientific: 'Aspergillus flavus',
++    kind: 'fungal',
++    crops: { Groundnut: [0.55, 1] },
++    temp: { min: 22, optLow: 28, optHigh: 33, max: 40 },
++    mode: 'dry',
++    stressBoost: 1.2,
++    symptoms:
++      'Often invisible; mouldy, shrivelled or yellow-green seed and pod damage. Toxic to people and livestock.',
++    scouting:
++      'Avoid pod damage at harvest; separate shrivelled or mouldy pods before drying and storage.',
++    management: [
++      'Avoid drought stress during pod filling by timing irrigation at pegging and pod development.',
++      'Harvest at maturity, dry pods quickly to safe moisture, store dry and off the ground.',
++      'Control soil insects and avoid damaging pods during weeding and harvest.',
++    ],
++  },
++
++  /* ---------------- Sugarcane ---------------- */
++  {
++    id: 'sugarcane-early-shoot-borer',
++    name: 'Sugarcane early shoot borer',
++    scientific: 'Chilo infuscatellus',
++    kind: 'insect',
++    crops: { Sugarcane: [0, 0.15] },
++    temp: { min: 20, optLow: 28, optHigh: 36, max: 42 },
++    mode: 'dry',
++    symptoms: 'Dead hearts in young shoots that pull out easily and smell bad; reduced tillers.',
++    scouting: 'Count dead hearts per 100 shoots in the first 4 months.',
++    management: [
++      'Plant healthy setts, earth up at the right time and irrigate to avoid hot, dry stress.',
++      'Remove and destroy dead hearts; release Trichogramma where recommended.',
++    ],
++  },
++  {
++    id: 'sugarcane-woolly-aphid',
++    name: 'Sugarcane woolly aphid',
++    scientific: 'Ceratovacuna lanigera',
++    local: 'लोकरी मावा',
++    kind: 'insect',
++    crops: { Sugarcane: [0.15, 0.8] },
++    temp: { min: 18, optLow: 22, optHigh: 30, max: 35 },
++    humidity: { min: 70, full: 90 },
++    mode: 'wet',
++    symptoms:
++      'White, cottony colonies on the underside of leaves, sooty mould, yellowing and drying of leaves.',
++    scouting:
++      'Check the underside of leaves at 10 spots; look for predators such as Dipha and Micromus.',
++    management: [
++      'Conserve natural predators (Dipha aphidivora, Micromus, syrphid flies); avoid indiscriminate sprays.',
++      'Avoid excess nitrogen and remove heavily infested leaves from small patches.',
++      IPM_NOTE,
++    ],
++  },
++  {
++    id: 'sugarcane-red-rot',
++    name: 'Sugarcane red rot',
++    scientific: 'Colletotrichum falcatum',
++    kind: 'fungal',
++    crops: { Sugarcane: [0.1, 0.9] },
++    temp: { min: 20, optLow: 26, optHigh: 32, max: 36 },
++    humidity: { min: 80, full: 95 },
++    mode: 'wet',
++    waterlogging: true,
++    symptoms:
++      'Leaf midribs show red patches, tops dry; split canes show red tissue with white cross-bands and an alcoholic smell.',
++    scouting: 'Split suspect canes lengthwise; look in waterlogged patches after heavy rain.',
++    management: [
++      'Plant disease-free setts of resistant varieties; treat setts before planting.',
++      'Improve drainage; rogue out infected clumps and avoid ratooning infected fields.',
++      'Rotate with a non-host crop.',
++    ],
++  },
++];
++
++export const threatsForCrop = (crop?: string) => THREATS.filter((t) => crop && crop in t.crops);
++
++/* ---------------------------- Risk model ---------------------------- */
++
++export type ThreatDay = {
++  date: string;
++  temperature: number;
++  rain: number;
++  humidity: number;
++  /** true when this day's weather was carried forward rather than observed */
++  carried: boolean;
++  /** crop development as a fraction of maturity GDD */
++  progress: number;
++  /** modelled water stress, 0–1 */
++  stress: number;
++  /** water above field capacity, 0 (at or below) to 1 (saturated) */
++  saturation: number;
++};
++
++export type ThreatAssessment = {
++  threatId: string;
++  score: number;
++  level: RiskLevel;
++  status: 'assessed' | 'outside-stage' | 'insufficient-weather';
++  drivers: string[];
++  daysUsed: number;
++  carriedDays: number;
++  /** susceptible stage range for this crop, in the crop's own stage names */
++  window: string;
++  /** recent daily scores, oldest first, for a small trend display */
++  trend: number[];
++};
++
++const clamp = (v: number, a = 0, b = 1) => Math.min(b, Math.max(a, v));
++const ramp = (v: number, lo: number, hi: number) => clamp((v - lo) / (hi - lo));
++const trapezoid = (v: number, t: Threat['temp']) =>
++  v <= t.min || v >= t.max
++    ? 0
++    : v < t.optLow
++      ? (v - t.min) / (t.optLow - t.min)
++      : v <= t.optHigh
++        ? 1
++        : (t.max - v) / (t.max - t.optHigh);
++
++export const riskLevel = (score: number): RiskLevel =>
++  score < 25 ? 'Low' : score < 50 ? 'Moderate' : score < 70 ? 'High' : 'Very high';
++
++function dayFavourability(th: Threat, d: ThreatDay, prev?: ThreatDay) {
++  const temperature = trapezoid(d.temperature, th.temp);
++  const rainRecent = Math.max(d.rain, prev?.rain ?? 0);
++  const wet = rainRecent >= 2 ? 1 : rainRecent >= 0.2 ? 0.6 : 0;
++  if (th.mode === 'wet') {
++    const humidity = th.humidity ? ramp(d.humidity, th.humidity.min, th.humidity.full) : 0;
++    return temperature * (th.humidity ? 0.65 * humidity + 0.35 * wet : 0.35 + 0.65 * wet);
++  }
++  if (th.mode === 'dry') {
++    const dryness = 1 - ramp(d.humidity, 55, 85);
++    return temperature * (0.5 + 0.5 * dryness) * (wet === 1 ? 0.7 : 1);
++  }
++  return temperature;
++}
++
++/**
++ * Weather shows whether conditions suit a pathogen (infection needs warmth, humidity and wetness), but
++ * it cannot show how many insects are actually present. Population-driven threats are therefore
++ * capped so weather alone cannot read "Very high": temperature-only insects stay at most Moderate and
++ * insects with a humidity or rain link at most High. Reaching the top needs scouting or trap counts.
++ */
++export const populationDriven = (th: Threat) => th.kind === 'insect' || !!th.vectorBorne;
++const weatherCeiling = (th: Threat) =>
++  !populationDriven(th) ? 1 : th.mode === 'neutral' ? 0.45 : 0.65;
++
++function stageSusceptibility(progress: number, [from, to]: [number, number]) {
++  return Math.min(ramp(progress, from - 0.05, from), 1 - ramp(progress, to, to + 0.05));
++}
++
++/** Score using the last ≤7 days ending at index `end` (inclusive). */
++function scoreAt(th: Threat, days: ThreatDay[], end: number, window: [number, number]) {
++  const start = Math.max(0, end - 6),
++    slice = days.slice(start, end + 1),
++    last = days[end];
++  let weighted = 0,
++    weights = 0;
++  for (let j = start; j <= end; j++) {
++    const w = j - start + 1;
++    weighted += w * dayFavourability(th, days[j], j > 0 ? days[j - 1] : undefined);
++    weights += w;
++  }
++  // Stress and waterlogging raise risk, but are normalised so ideal weather alone can never reach
++  // 100 for threats that also depend on them: the top of the scale needs the extra condition too.
++  const base = weights ? weighted / weights : 0,
++    stage = stageSusceptibility(last.progress, window),
++    maxAmplifier = (1 + (th.stressBoost || 0)) * (th.waterlogging ? 1.4 : 1),
++    amplifier =
++      ((1 + (th.stressBoost || 0) * last.stress) *
++        (th.waterlogging ? 1 + 0.4 * last.saturation : 1)) /
++      maxAmplifier;
++  return {
++    base,
++    stage,
++    score: Math.round(clamp(base * stage * amplifier * weatherCeiling(th)) * 100),
++    slice,
++    last,
++  };
++}
++
++/**
++ * Assess one threat for one plot.
++ * `days` must be chronological daily records (most recent last).
++ */
++export function assessThreat(th: Threat, crop: CropName, days: ThreatDay[]): ThreatAssessment {
++  const window = th.crops[crop];
++  if (!window) throw new Error(`${th.id} does not apply to ${crop}`);
++  const cfg = CROPS[crop],
++    windowLabel = `${cropStage(cfg, Math.max(0, window[0]) * cfg.maturityGdd + 1)} → ${cropStage(cfg, window[1] * cfg.maturityGdd)}`;
++  const empty = {
++    threatId: th.id,
++    score: 0,
++    level: 'Low' as RiskLevel,
++    drivers: [] as string[],
++    daysUsed: 0,
++    carriedDays: 0,
++    window: windowLabel,
++    trend: [] as number[],
++  };
++  if (!days.length) return { ...empty, status: 'insufficient-weather' };
++  const end = days.length - 1,
++    now = scoreAt(th, days, end, window),
++    carriedDays = now.slice.filter((d) => d.carried).length;
++  const trend: number[] = [];
++  for (let i = Math.max(0, end - 6); i <= end; i++) trend.push(scoreAt(th, days, i, window).score);
++  if (now.stage <= 0)
++    return {
++      ...empty,
++      status: 'outside-stage',
++      daysUsed: now.slice.length,
++      carriedDays,
++      trend,
++      drivers: [
++        now.last.progress < window[0]
++          ? 'The crop has not yet reached the stage this threat attacks.'
++          : 'The crop has passed the stage this threat attacks.',
++      ],
++    };
++  const mean = (f: (d: ThreatDay) => number) =>
++    now.slice.reduce((s, d) => s + f(d), 0) / now.slice.length;
++  const meanT = mean((d) => d.temperature),
++    meanH = mean((d) => d.humidity),
++    rainDays = now.slice.filter((d) => d.rain >= 2).length;
++  const drivers: string[] = [];
++  const inRange = trapezoid(meanT, th.temp) >= 0.67;
++  drivers.push(
++    inRange
++      ? `Average temperature ${meanT.toFixed(0)}°C is in the favourable range (${th.temp.optLow}–${th.temp.optHigh}°C).`
++      : `Average temperature ${meanT.toFixed(0)}°C is outside the best range for this threat (${th.temp.optLow}–${th.temp.optHigh}°C).`,
++  );
++  if (th.mode === 'wet') {
++    if (th.humidity)
++      drivers.push(
++        meanH >= th.humidity.min
++          ? `Humidity averaged ${meanH.toFixed(0)}% (it needs about ${th.humidity.min}% or more).`
++          : `Humidity averaged ${meanH.toFixed(0)}%, below the ${th.humidity.min}% it needs.`,
++      );
++    drivers.push(
++      rainDays
++        ? `${rainDays} wet day${rainDays > 1 ? 's' : ''} (2 mm or more) in the last ${now.slice.length} days.`
++        : 'No significant rain in the last few days.',
++    );
++  } else if (th.mode === 'dry') {
++    drivers.push(
++      meanH < 70
++        ? `Humidity averaged ${meanH.toFixed(0)}%; warm, drier air favours this threat.`
++        : `Humidity averaged ${meanH.toFixed(0)}%, which is higher than it prefers.`,
++    );
++  }
++  if (th.stressBoost && now.last.stress > 0.25)
++    drivers.push('Modelled water stress is raising susceptibility.');
++  if (th.waterlogging && now.last.saturation > 0)
++    drivers.push('The root zone is above field capacity, which raises the risk.');
++  if (populationDriven(th))
++    drivers.push(
++      'Weather shows whether conditions suit this pest, not how many are present. Check traps or scout to confirm.',
++    );
++  if (carriedDays)
++    drivers.push(
++      `${carriedDays} of the last ${now.slice.length} weather days were carried forward, so confidence is lower.`,
++    );
++  return {
++    threatId: th.id,
++    score: now.score,
++    level: riskLevel(now.score),
++    status: now.slice.length < 3 ? 'insufficient-weather' : 'assessed',
++    drivers,
++    daysUsed: now.slice.length,
++    carriedDays,
++    window: windowLabel,
++    trend,
++  };
++}
++
++export type PlotThreatReport = {
++  plotId: string;
++  plotName: string;
++  crop: CropName;
++  /** date of the latest weather day used, or null when none is available */
++  asOf: string | null;
++  weatherDays: number;
++  assessments: ThreatAssessment[];
++};
++
++export const RISK_ADVICE: Record<RiskLevel, string> = {
++  Low: 'No special action. Keep routine weekly scouting.',
++  Moderate: 'Scout the field in the next 2–3 days and check traps or lower leaves.',
++  High: 'Scout now. Prepare to act if counts reach the local threshold and carry out the cultural steps listed.',
++  'Very high':
++    'Scout today and again in 2–3 days. Confirm with your local agriculture officer or KVK before treating.',
++};
++
++export function assessPlotThreats(crop: CropName, days: ThreatDay[]): ThreatAssessment[] {
++  return threatsForCrop(crop)
++    .map((th) => assessThreat(th, crop, days))
++    .sort((a, b) => b.score - a.score);
++}

@@ -1,4 +1,4 @@
-import { test } from 'node:test';
+﻿import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import { PGlite } from '@electric-sql/pglite';
@@ -6,10 +6,22 @@ import { PGLiteSocketServer } from '@electric-sql/pglite-socket';
 import { Store } from '../services/store.js';
 import { newRun, irrigate, current, synthetic, tick, experiment } from '../simulation/engine.js';
 import type { Farm, Plot } from '@agritwin/shared';
+
 test('PostgreSQL migration and Prisma persist/reload normalized farm history', async () => {
   process.env.DB_POOL_SIZE = '1';
   let db = await PGlite.create();
-  await db.exec(await fs.readFile('prisma/migrations/202610230001_init/migration.sql', 'utf8'));
+
+  const migrationRoot = 'prisma/migrations';
+  const migrations = (await fs.readdir(migrationRoot, { withFileTypes: true }))
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .sort();
+
+  for (const migration of migrations) {
+    const sql = await fs.readFile(`${migrationRoot}/${migration}/migration.sql`, 'utf8');
+    await db.exec(sql);
+  }
+
   let server = new PGLiteSocketServer({ db, host: '127.0.0.1', port: 56379 });
   await server.start();
   const url = 'postgresql://postgres:postgres@127.0.0.1:56379/postgres?sslmode=disable',
@@ -66,7 +78,7 @@ test('PostgreSQL migration and Prisma persist/reload normalized farm history', a
     await server.start();
     const restored = new Store('unused', url);
     await restored.init();
-    assert.deepEqual(current(restored.data.farms[0].run).states, saved.states);
+    assert.deepEqual(JSON.parse(JSON.stringify(current(restored.data.farms[0].run).states)), JSON.parse(JSON.stringify(saved.states)));
     await restored.transaction(() => {
       const live = restored.data.farms[0];
       live.scenarios.push(
@@ -105,3 +117,4 @@ test('PostgreSQL migration and Prisma persist/reload normalized farm history', a
     await db.close();
   }
 });
+

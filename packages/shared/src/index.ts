@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { CROP_NAMES } from './crops';
 export * from './crops';
 export * from './lifecycle';
+export * from './threats';
 export const MODEL_VERSION = 'agritwin-maharashtra-v3';
 export const soilSchema = z.enum(['Loam', 'Sandy', 'Clay']);
 export type Soil = z.infer<typeof soilSchema>;

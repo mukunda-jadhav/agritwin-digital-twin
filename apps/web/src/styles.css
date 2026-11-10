@@ -2554,3 +2554,121 @@ ul {
     padding: 0 12px 14px;
   }
 }
+
+/* Crop health */
+.threat-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 18px;
+  margin-top: 22px;
+}
+.threat-card {
+  padding: 20px;
+  border-left: 4px solid #b9c7bd;
+}
+.threat-card.level-moderate {
+  border-left-color: #c9a63e;
+}
+.threat-card.level-high {
+  border-left-color: #cf7a36;
+}
+.threat-card.level-very-high {
+  border-left-color: #b8412f;
+}
+.threat-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+.threat-head h3 {
+  font-size: 15px;
+  margin: 0 0 3px;
+}
+.threat-risk {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 14px 0 8px;
+}
+.threat-risk strong {
+  font-size: 13px;
+  white-space: nowrap;
+}
+.threat-meter {
+  flex: 1;
+  height: 8px;
+  background: #e9eee9;
+  border-radius: 4px;
+  overflow: hidden;
+}
+.threat-meter span {
+  display: block;
+  height: 100%;
+  background: #6e9878;
+  border-radius: 4px;
+}
+.level-moderate .threat-meter span {
+  background: #c9a63e;
+}
+.level-high .threat-meter span {
+  background: #cf7a36;
+}
+.level-very-high .threat-meter span {
+  background: #b8412f;
+}
+.threat-trend {
+  width: 56px;
+  height: 24px;
+  fill: #8aa293;
+  flex-shrink: 0;
+}
+.threat-advice {
+  font-size: 13px;
+  margin: 4px 0 8px;
+}
+.threat-drivers {
+  margin: 0 0 8px;
+  padding-left: 18px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.threat-more {
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+  font-size: 12px;
+}
+.threat-more summary {
+  cursor: pointer;
+  color: var(--green);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.threat-more p,
+.threat-more ul {
+  margin: 8px 0;
+  line-height: 1.5;
+}
+.threat-more ul {
+  padding-left: 18px;
+}
+.threat-inactive {
+  list-style: none;
+  padding: 0;
+  margin: 14px 0 0;
+  display: grid;
+  gap: 8px;
+}
+.threat-inactive li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+  flex-wrap: wrap;
+}
+@media (max-width: 900px) {
+  .threat-grid {
+    grid-template-columns: 1fr;
+  }
+}

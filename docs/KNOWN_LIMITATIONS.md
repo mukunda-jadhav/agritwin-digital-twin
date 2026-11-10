@@ -9,6 +9,7 @@
 - Some technical/help text still falls back to English. Browser speech depends on installed voices.
 - The backend currently supports one API instance. Runs pause on restart; multi-instance workers require coordination.
 - Hosted deployment, database migration and end-to-end live sign-in have not been activated from this workspace.
+- Disease and pest risk is a weather- and stage-based index with generalised reference ranges, not a diagnosis, a pest count or a validated forecast. Insect risk is capped because weather alone cannot show population size. Threat names and guidance are in English with Marathi names for only some entries.
 
 New runs do not use generated weather. Legacy saved runs and archives are retained with their original weather provenance; reset a legacy run to start a current model run.
 

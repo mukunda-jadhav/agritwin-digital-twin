@@ -28,5 +28,19 @@ Starting water is estimated from a gridded weather-model soil-moisture product w
 
 A scenario compares two branches from a saved farm state using the same weather rows and different user-selected temperature, rainfall or irrigation assumptions. The active run is not changed.
 
-This is a software research prototype. Daily steps omit layered infiltration, nutrients, pests, disease, cultivar detail, and field-scale spatial variation. No agronomic validation or prediction-accuracy claim is made.
+This is a software research prototype. Daily steps omit layered infiltration, nutrients, cultivar detail, and field-scale spatial variation. Disease and pest risk is reported separately as a weather-driven index (see below); it does not feed back into simulated growth or yield. No agronomic validation or prediction-accuracy claim is made.
 
+
+## Crop health (disease and pest risk index)
+
+`packages/shared/src/threats.ts` holds a reference library of 40 Maharashtra diseases and pests covering all 12 crop profiles (each crop has at least one disease and one pest). Each entry records the susceptible crop stage, the temperature and humidity range that favours it, whether wet or dry weather favours it, symptoms, a scouting method and integrated pest management steps.
+
+For each plot the API reads up to 14 days of saved provider weather and the plot's modelled crop stage, water stress and soil saturation. Each day's favourability is a temperature trapezoid combined with humidity and recent rain (wet-weather threats) or dryness (dry-weather pests and vectors). The last 7 days are averaged with recent days weighted more, multiplied by a stage factor that is zero outside the susceptible window, then scaled by water stress (for example charcoal rot, dry root rot, aflatoxin) and waterlogging (Phytophthora blight, red rot) where those matter. The result is a 0–100 index: Low below 25, Moderate to 49, High to 69, Very high from 70.
+
+What the index is and is not:
+
+- It is a **risk index**, not a diagnosis. It does not count pests or confirm infection.
+- Daily regional weather replaces in-field leaf wetness, so humidity and rain are proxies.
+- Weather cannot show insect numbers, so population-driven threats are capped: temperature-only insects at Moderate and weather-linked insects and vector-borne viruses at High. Reaching Very high for these requires scouting or trap counts, which the prototype does not yet record.
+- Generated (synthetic) weather is never used. Carried-forward days are counted and disclosed, and fewer than 3 weather days is labelled indicative.
+- Temperature, humidity and stage ranges are generalised reference values from standard crop-protection literature. They have not been calibrated against Maharashtra outbreak records, and local names and management steps should be reviewed by a KVK or state agricultural university officer before use. The library gives integrated pest management steps and does not recommend pesticide products or doses.

@@ -29,6 +29,8 @@ Authentication uses an HTTP-only signed session cookie. Browser requests include
 | GET | /farms/:id/predictions | Explainable irrigation and crop-state estimates |
 | GET | /farms/:id/analytics | History, events and archived runs |
 | POST | /farms/:id/scenarios | Compare two simulated management choices |
+| GET | /farms/:id/threats | Disease and pest risk index for each plot, from saved provider weather and crop stage |
+| GET | /threats?crop=Wheat | Public disease and pest reference library, optionally filtered by crop |
 
 Nested farm routes check ownership. Invalid requests return 400 and an error message; missing or unowned farms return 404. Account limits: 20 farms, 24 plots per farm, 120 days per advance command, 730 days per run, 10 archived runs and 30 scenarios per farm.
 

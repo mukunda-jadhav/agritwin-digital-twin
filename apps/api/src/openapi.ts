@@ -149,6 +149,18 @@ route(
 );
 route('/farms/{id}/analytics', 'get', 'Complete snapshots, irrigation events and archives');
 route(
+  '/farms/{id}/threats',
+  'get',
+  'Weather- and stage-driven disease and pest risk index per plot',
+);
+route(
+  '/threats',
+  'get',
+  'Disease and pest reference library (optional crop filter)',
+  undefined,
+  false,
+);
+route(
   '/farms/{id}/scenarios',
   'post',
   'Run and save paired scenario branches',

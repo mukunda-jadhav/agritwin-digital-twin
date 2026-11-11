@@ -1,3 +1,4 @@
+import { observationInput, cropFor } from '@agritwin/shared';
 import { initializeSoil } from './services/initialization.js';
 import { marketPrices, MarketUnavailable } from './services/market.js';
 import { seasonState, isMature } from '@agritwin/shared';
@@ -583,6 +584,35 @@ export async function createApp(
     });
     publish(f);
     res.json(f);
+  });
+  app.post('/api/farms/:id/observations', async (req, res) => {
+    const b = observationInput.parse(req.body);
+    const f = await store.transaction(() => {
+      const f = owner(String(req.params.id), res.locals.user);
+      const plot = f.plots.find((p) => p.id === b.plotId);
+      if (!plot) throw new HttpError(404, 'Plot not found');
+      if (b.runId !== f.run.id)
+        throw new HttpError(409, 'The season changed. Reload and try again.');
+      if (f.observations?.some((o) => o.id === b.id)) return f;
+      if ((f.observations?.length || 0) >= 1000)
+        throw new HttpError(400, 'Observation limit reached');
+      if (b.stage && !cropFor(plot.crop).stages.some((s) => s.name === b.stage))
+        throw new HttpError(400, 'Choose a stage for this crop');
+      const snapshot = [...f.run.history].reverse().find((s) => s.date === b.date);
+      const state = snapshot?.states.find((s) => s.plotId === b.plotId);
+      if (!snapshot || !state) throw new HttpError(400, 'Choose a saved simulation date');
+      (f.observations ||= []).push({
+        ...b,
+        createdAt: new Date().toISOString(),
+        modelVersion: f.run.modelVersion,
+        snapshotId: snapshot.id,
+        modeledStage: state.stage,
+        modeledHarvestKg: state.harvestedKg || 0,
+      });
+      return f;
+    });
+    publish(f);
+    res.status(201).json(f);
   });
   app.get('/api/farms/:id/predictions', async (req, res) => {
     const f = owner(String(req.params.id), res.locals.user),

@@ -114,9 +114,61 @@ test('registration, ownership, irrigation, socket rooms, and persistent restart'
     const denied = await new Promise<any>((r) => other.emit('farm:join', farm.id, r));
     assert.ok(denied.error);
     other.disconnect();
+    const observation = {
+      id: crypto.randomUUID(),
+      plotId: farm.plots[0].id,
+      runId: farm.run.id,
+      date: farm.run.history[0].date,
+      stage: 'Germination',
+      heightCm: 3,
+      note: 'First leaves',
+    };
+    assert.equal(
+      (await request(`/farms/${farm.id}/observations`, observation, b.cookie)).status,
+      404,
+    );
+    const observed = await request(`/farms/${farm.id}/observations`, observation, a.cookie);
+    assert.equal(observed.status, 201);
+    assert.equal(observed.data.observations[0].modeledStage, 'Germination');
+    assert.equal(
+      (await request(`/farms/${farm.id}/observations`, observation, a.cookie)).data.observations
+        .length,
+      1,
+    );
+    assert.equal(
+      (
+        await request(
+          `/farms/${farm.id}/observations`,
+          { ...observation, id: crypto.randomUUID(), runId: 'old-season' },
+          a.cookie,
+        )
+      ).status,
+      409,
+    );
+    assert.equal(
+      (
+        await request(
+          `/farms/${farm.id}/observations`,
+          { ...observation, id: crypto.randomUUID(), heightCm: -1 },
+          a.cookie,
+        )
+      ).status,
+      400,
+    );
+    assert.equal(
+      (
+        await request(
+          `/farms/${farm.id}/observations`,
+          { ...observation, id: crypto.randomUUID(), date: '2099-01-01' },
+          a.cookie,
+        )
+      ).status,
+      400,
+    );
     const reread = new Store(file, '');
     await reread.init();
     assert.equal(reread.data.farms[0].run.version, 1);
+    assert.equal(reread.data.farms[0].observations?.[0].heightCm, 3);
     assert.equal(reread.data.farms[0].run.history.at(-1)!.states[0].waterLitres, 10000);
     const invalid = await request(
       `/farms/${farm.id}/irrigation`,
@@ -135,7 +187,7 @@ test('registration, ownership, irrigation, socket rooms, and persistent restart'
   } finally {
     socket?.disconnect();
     await app.close();
-    assert.equal(path.dirname(path.resolve(dir)),path.resolve(os.tmpdir()));
+    assert.equal(path.dirname(path.resolve(dir)), path.resolve(os.tmpdir()));
     assert.ok(path.basename(dir).startsWith('agritwin-test-'));
     await fs.rm(dir, { recursive: true, force: true });
   }

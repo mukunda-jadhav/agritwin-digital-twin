@@ -63,6 +63,21 @@ test('PostgreSQL migration and Prisma persist/reload normalized farm history', a
     await store.transaction(() => {
       irrigate(f.run, plot, 10, 'db-irrigation');
       tick(f.run, [plot], synthetic('2026-01-02'));
+      f.observations = [
+        {
+          id: 'db-observation',
+          plotId: plot.id,
+          runId: f.run.id,
+          date: '2026-01-02',
+          createdAt: new Date().toISOString(),
+          heightCm: 5,
+          note: 'Measured',
+          modelVersion: f.run.modelVersion,
+          snapshotId: current(f.run).id,
+          modeledStage: current(f.run).states[0].stage,
+          modeledHarvestKg: 0,
+        },
+      ];
     });
     assert.equal(await store.db!.simulationSnapshot.count(), 3);
     assert.equal(await store.db!.weatherRecord.count(), 1);
@@ -78,7 +93,11 @@ test('PostgreSQL migration and Prisma persist/reload normalized farm history', a
     await server.start();
     const restored = new Store('unused', url);
     await restored.init();
-    assert.deepEqual(JSON.parse(JSON.stringify(current(restored.data.farms[0].run).states)), JSON.parse(JSON.stringify(saved.states)));
+    assert.equal(restored.data.farms[0].observations?.[0].heightCm, 5);
+    assert.deepEqual(
+      JSON.parse(JSON.stringify(current(restored.data.farms[0].run).states)),
+      JSON.parse(JSON.stringify(saved.states)),
+    );
     await restored.transaction(() => {
       const live = restored.data.farms[0];
       live.scenarios.push(
@@ -117,4 +136,3 @@ test('PostgreSQL migration and Prisma persist/reload normalized farm history', a
     await db.close();
   }
 });
-

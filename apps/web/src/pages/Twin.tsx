@@ -1,3 +1,7 @@
+import { SeasonTimeline } from '../components/SeasonTimeline';
+import { SoilCutaway } from '../components/SoilCutaway';
+import { FieldNotes } from '../components/FieldNotes';
+import type { FieldLayer } from '../farm3d/FarmScene';
 import { TwinEvidence } from '../components/TwinEvidence';
 import { seasonState, isMature } from '@agritwin/shared';
 import { HarvestNotice } from '../components/HarvestNotice';
@@ -23,7 +27,7 @@ import { useFarm } from '../stores/useFarm';
 import { api, post } from '../services/api';
 import { Button } from '../components/ui/button';
 import { Speak } from '../components/Language';
-import { dateLabel, fmt, HistoryChart, last, plotMoisture, StatCards } from '../components/common';
+import { dateLabel, fmt, HistoryChart, last, plotMoisture } from '../components/common';
 import type { CameraView } from '../farm3d/FarmScene';
 import { t } from '../i18n';
 import { toAcres } from '../utils/landArea';
@@ -36,6 +40,8 @@ export function Twin({ expanded = false }: { expanded?: boolean }) {
     [predictions, setPredictions] = useState<Prediction[]>([]),
     [view, setView] = useState<CameraView>('isometric'),
     [advanced, setAdvanced] = useState(false),
+    [layer, setLayer] = useState<FieldLayer>('natural'),
+    [soilOpen, setSoilOpen] = useState(false),
     [replay, setReplay] = useState(-1),
     [reset, setReset] = useState(false);
   useEffect(() => {
@@ -136,7 +142,7 @@ export function Twin({ expanded = false }: { expanded?: boolean }) {
             aria-pressed={advanced}
           >
             <Settings2 size={16} />
-            {t(advanced ? 'Simple view' : 'Advanced view')}
+            {t(advanced ? 'Simple view' : 'More details')}
           </button>
           <div className="date-chip">
             <span>{t('Simulation date')}</span>
@@ -162,7 +168,33 @@ export function Twin({ expanded = false }: { expanded?: boolean }) {
           Day {snap.day} · {replay >= 0 ? 'Viewing history' : 'Current simulation state'}
         </span>
       </div>
-      {advanced && <StatCards farm={farm} snapshot={snap} />}
+      <div className="simple-summary">
+        <div>
+          <span>{t('Growth stage')}</span>
+          <strong>{t(state.stage)}</strong>
+          <small>
+            {t('Day')} {snap.day}
+          </small>
+        </div>
+        <div>
+          <span>{t('Available soil water')}</span>
+          <strong>{fmt(plotMoisture(plot, state.water, farm.run.modelVersion))}%</strong>
+          <small>{t(dry ? 'Your crop may need water' : 'Soil water is sufficient.')}</small>
+        </div>
+        <div>
+          <span>{t('Crop condition')}</span>
+          <strong>
+            {t(
+              state.stress > 0.6
+                ? 'High stress'
+                : state.stress > 0.25
+                  ? 'Moderate stress'
+                  : 'Low stress',
+            )}
+          </strong>
+          <small>{t('Model estimate')}</small>
+        </div>
+      </div>
       <div className={`twin-grid ${expanded ? 'expanded' : ''}`}>
         <section className="card twin-card">
           <div className="section-heading field-heading">
@@ -214,6 +246,40 @@ export function Twin({ expanded = false }: { expanded?: boolean }) {
               </button>
             ))}
           </div>
+          <div className="layer-toolbar">
+            <label>
+              {t('Show on field')}
+              <select
+                aria-label={t('Show on field')}
+                value={layer}
+                onChange={(e) => setLayer(e.target.value as FieldLayer)}
+              >
+                <option value="natural">{t('Crops')}</option>
+                <option value="water">{t('Soil water')}</option>
+                <option value="stress">{t('Crop stress')}</option>
+                <option value="growth">{t('Growth')}</option>
+              </select>
+            </label>
+            <button
+              className="button button-outline"
+              aria-expanded={soilOpen}
+              onClick={() => setSoilOpen(!soilOpen)}
+            >
+              {t(soilOpen ? 'Hide soil' : 'Look under soil')}
+            </button>
+          </div>
+          {layer !== 'natural' && (
+            <div className={`layer-legend ${layer}`}>
+              <span>
+                {t(layer === 'water' ? 'Dry' : layer === 'stress' ? 'Low stress' : 'Young crop')}
+              </span>
+              <i />
+              <span>
+                {t(layer === 'water' ? 'Wet' : layer === 'stress' ? 'High stress' : 'Mature crop')}
+              </span>
+              <small>{t('One estimate per plot')}</small>
+            </div>
+          )}
           <div className="farm-canvas">
             <Suspense fallback={<div className="scene-fallback">{t('Loading…')}</div>}>
               <FarmScene
@@ -222,6 +288,7 @@ export function Twin({ expanded = false }: { expanded?: boolean }) {
                 selected={plot.id}
                 onSelect={select}
                 view={view}
+                layer={layer}
               />
             </Suspense>
           </div>
@@ -231,8 +298,19 @@ export function Twin({ expanded = false }: { expanded?: boolean }) {
                 ? 'Saved outer boundary · plot locations are not surveyed'
                 : t('Schematic layout • sampled plants • not a satellite image')}
             </span>
-            <span>Drag to rotate · Scroll to zoom</span>
+            <span>{t('Drag to rotate · Scroll to zoom')}</span>
           </div>
+          {soilOpen && (
+            <SoilCutaway plot={plot} state={state} modelVersion={farm.run.modelVersion} />
+          )}
+          <SeasonTimeline
+            key={farm.run.id}
+            history={farm.run.history}
+            plotId={plot.id}
+            index={replay}
+            onChange={setReplay}
+            onCurrent={() => setReplay(-1)}
+          />
           <div className="simulation-toolbar" id="season-reset">
             <div className="inline">
               <Button
@@ -309,29 +387,6 @@ export function Twin({ expanded = false }: { expanded?: boolean }) {
           {error && (
             <div className="error" role="alert">
               <span>{t(error)}</span>
-            </div>
-          )}
-          {advanced && (
-            <div className="replay">
-              <label htmlFor="replay">
-                {t('Timeline')}
-                <span>
-                  {t('Day')} {snap.day} · {t(replay >= 0 ? 'Saved state' : 'Current state')}
-                </span>
-              </label>
-              <input
-                id="replay"
-                type="range"
-                min={0}
-                max={Math.max(0, farm.run.history.length - 1)}
-                value={replay < 0 ? farm.run.history.length - 1 : replay}
-                onChange={(e) => setReplay(Number(e.target.value))}
-              />
-              {replay >= 0 && (
-                <button className="text-button" onClick={() => setReplay(-1)}>
-                  {t('Return to current state')} →
-                </button>
-              )}
             </div>
           )}
         </section>
@@ -493,6 +548,7 @@ export function Twin({ expanded = false }: { expanded?: boolean }) {
           </section>
         </div>
       )}
+      <FieldNotes key={farm.id + farm.run.id} farm={farm} plot={plot} snapshot={snap} />
       <TwinEvidence farm={farm} snapshot={snap} weather={w} />
       {advanced && (
         <section className="card padded table-section">

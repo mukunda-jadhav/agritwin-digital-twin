@@ -105,157 +105,156 @@ export class Store {
       await fs.rename(this.file + '.tmp', this.file);
       return;
     }
-    await this.db.$transaction(
-      async (tx) => {
-        for (const u of this.data.users)
-          if (JSON.stringify(previous.users.find((x) => x.id === u.id)) !== JSON.stringify(u)) {
-            const fields = {
-              name: u.name,
-              email: u.email,
-              passwordHash: u.passwordHash,
-              sessionVersion: u.sessionVersion || 0,
-              firebaseUid: u.firebaseUid || null,
-            };
-            await tx.user.upsert({
-              where: { id: u.id },
-              create: { id: u.id, ...fields },
-              update: fields,
-            });
-          }
-        for (const old of previous.farms)
-          if (!this.data.farms.some((f) => f.id === old.id))
-            await tx.farm.delete({ where: { id: old.id } });
-        for (const f of this.data.farms) {
-          const old = previous.farms.find((x) => x.id === f.id);
-          if (old && JSON.stringify(old) === JSON.stringify(f)) continue;
-          const metadata = {
-            ownerId: f.ownerId,
-            name: f.name,
-            location: f.location,
-            latitude: f.latitude,
-            longitude: f.longitude,
-            area: f.area,
-            unit: f.unit,
-            economics: f.economics ? json(f.economics) : Prisma.JsonNull,
-            boundary: f.boundary ? json(f.boundary) : Prisma.JsonNull,
+    await this.db.$transaction(async (tx) => {
+      for (const u of this.data.users)
+        if (JSON.stringify(previous.users.find((x) => x.id === u.id)) !== JSON.stringify(u)) {
+          const fields = {
+            name: u.name,
+            email: u.email,
+            passwordHash: u.passwordHash,
+            sessionVersion: u.sessionVersion || 0,
+            firebaseUid: u.firebaseUid || null,
           };
-          await tx.farm.upsert({
-            where: { id: f.id },
-            create: { id: f.id, ...metadata },
-            update: metadata,
+          await tx.user.upsert({
+            where: { id: u.id },
+            create: { id: u.id, ...fields },
+            update: fields,
           });
-          await tx.simulationRun.deleteMany({
-            where: { farmId: f.id, id: { notIn: [...f.archives, f.run].map((r) => r.id) } },
+        }
+      for (const old of previous.farms)
+        if (!this.data.farms.some((f) => f.id === old.id))
+          await tx.farm.delete({ where: { id: old.id } });
+      for (const f of this.data.farms) {
+        const old = previous.farms.find((x) => x.id === f.id);
+        if (old && JSON.stringify(old) === JSON.stringify(f)) continue;
+        const metadata = {
+          ownerId: f.ownerId,
+          name: f.name,
+          location: f.location,
+          latitude: f.latitude,
+          longitude: f.longitude,
+          area: f.area,
+          unit: f.unit,
+          observations: f.observations ? json(f.observations) : Prisma.JsonNull,
+          economics: f.economics ? json(f.economics) : Prisma.JsonNull,
+          boundary: f.boundary ? json(f.boundary) : Prisma.JsonNull,
+        };
+        await tx.farm.upsert({
+          where: { id: f.id },
+          create: { id: f.id, ...metadata },
+          update: metadata,
+        });
+        await tx.simulationRun.deleteMany({
+          where: { farmId: f.id, id: { notIn: [...f.archives, f.run].map((r) => r.id) } },
+        });
+        const removed = old?.plots.filter((p) => !f.plots.some((x) => x.id === p.id)) || [];
+        for (const p of removed) await tx.plot.delete({ where: { id: p.id } });
+        for (const p of f.plots) {
+          await tx.plot.upsert({
+            where: { id: p.id },
+            create: { ...p, farmId: f.id },
+            update: p,
           });
-          const removed = old?.plots.filter((p) => !f.plots.some((x) => x.id === p.id)) || [];
-          for (const p of removed) await tx.plot.delete({ where: { id: p.id } });
-          for (const p of f.plots) {
-            await tx.plot.upsert({
-              where: { id: p.id },
-              create: { ...p, farmId: f.id },
-              update: p,
-            });
-            await tx.planting.upsert({
-              where: { plotId: p.id },
-              create: {
-                id: p.id,
-                plotId: p.id,
-                cropId:
-                  f.run.modelVersion === CROP.version
-                    ? CROP.version
-                    : `${MODEL_VERSION}-${p.crop || 'Tomato'}`,
-                plantingDate: p.plantingDate,
-              },
-              update: {
-                plantingDate: p.plantingDate,
-                cropId:
-                  f.run.modelVersion === CROP.version
-                    ? CROP.version
-                    : `${MODEL_VERSION}-${p.crop || 'Tomato'}`,
-              },
-            });
-          }
-          for (const r of [...f.archives, f.run]) {
-            const meta = {
-              modelVersion: r.modelVersion,
-              status: r.status,
-              speed: r.speed,
-              version: r.version,
-              active: r.id === f.run.id,
-            };
-            await tx.simulationRun.upsert({
-              where: { id: r.id },
-              create: { id: r.id, farmId: f.id, ...meta },
-              update: meta,
-            });
-            const prior = [...(old?.archives || []), ...(old ? [old.run] : [])].find(
-              (x) => x.id === r.id,
-            );
-            for (const s of r.history.filter((s) => !prior?.history.some((x) => x.id === s.id)))
-              await tx.simulationSnapshot.create({
-                data: {
-                  id: s.id,
-                  runId: r.id,
-                  date: s.date,
-                  day: s.day,
-                  version: s.version,
-                  weather: s.weather ? json(s.weather) : Prisma.JsonNull,
-                  states: {
-                    create: s.states.map((state) => ({ plotId: state.plotId, data: json(state) })),
-                  },
-                },
-              });
-            for (const e of r.events)
-              await tx.irrigationEvent.upsert({
-                where: { id: e.id },
-                create: { ...e, runId: r.id },
-                update: e,
-              });
-            for (const e of r.harvests || [])
-              await tx.harvestEvent.upsert({
-                where: { id: e.id },
-                create: { ...e, runId: r.id },
-                update: {},
-              });
-            for (const w of r.weather)
-              await tx.weatherRecord.upsert({
-                where: { runId_date: { runId: r.id, date: w.date } },
-                create: { runId: r.id, date: w.date, source: w.source, data: json(w) },
-                update: {},
-              });
-            const snap = current(r);
-            await tx.prediction.upsert({
-              where: { runId_version: { runId: r.id, version: r.version } },
-              create: {
-                runId: r.id,
-                version: r.version,
-                data: json(
-                  f.plots.map((p) =>
-                    predict(
-                      p,
-                      snap.states.find((s) => s.plotId === p.id)!,
-                      0,
-                      r.modelVersion,
-                    ),
-                  ),
-                ),
-              },
-              update: {},
-            });
-          }
-          for (const s of f.scenarios.filter((s) => !old?.scenarios.some((x) => x.id === s.id)))
-            await tx.scenario.create({
+          await tx.planting.upsert({
+            where: { plotId: p.id },
+            create: {
+              id: p.id,
+              plotId: p.id,
+              cropId:
+                f.run.modelVersion === CROP.version
+                  ? CROP.version
+                  : `${MODEL_VERSION}-${p.crop || 'Tomato'}`,
+              plantingDate: p.plantingDate,
+            },
+            update: {
+              plantingDate: p.plantingDate,
+              cropId:
+                f.run.modelVersion === CROP.version
+                  ? CROP.version
+                  : `${MODEL_VERSION}-${p.crop || 'Tomato'}`,
+            },
+          });
+        }
+        for (const r of [...f.archives, f.run]) {
+          const meta = {
+            modelVersion: r.modelVersion,
+            status: r.status,
+            speed: r.speed,
+            version: r.version,
+            active: r.id === f.run.id,
+          };
+          await tx.simulationRun.upsert({
+            where: { id: r.id },
+            create: { id: r.id, farmId: f.id, ...meta },
+            update: meta,
+          });
+          const prior = [...(old?.archives || []), ...(old ? [old.run] : [])].find(
+            (x) => x.id === r.id,
+          );
+          for (const s of r.history.filter((s) => !prior?.history.some((x) => x.id === s.id)))
+            await tx.simulationSnapshot.create({
               data: {
                 id: s.id,
-                farmId: f.id,
-                config: json(s.config),
-                baseline: json(s.baseline),
-                experiment: json(s.experiment),
+                runId: r.id,
+                date: s.date,
+                day: s.day,
+                version: s.version,
+                weather: s.weather ? json(s.weather) : Prisma.JsonNull,
+                states: {
+                  create: s.states.map((state) => ({ plotId: state.plotId, data: json(state) })),
+                },
               },
             });
+          for (const e of r.events)
+            await tx.irrigationEvent.upsert({
+              where: { id: e.id },
+              create: { ...e, runId: r.id },
+              update: e,
+            });
+          for (const e of r.harvests || [])
+            await tx.harvestEvent.upsert({
+              where: { id: e.id },
+              create: { ...e, runId: r.id },
+              update: {},
+            });
+          for (const w of r.weather)
+            await tx.weatherRecord.upsert({
+              where: { runId_date: { runId: r.id, date: w.date } },
+              create: { runId: r.id, date: w.date, source: w.source, data: json(w) },
+              update: {},
+            });
+          const snap = current(r);
+          await tx.prediction.upsert({
+            where: { runId_version: { runId: r.id, version: r.version } },
+            create: {
+              runId: r.id,
+              version: r.version,
+              data: json(
+                f.plots.map((p) =>
+                  predict(
+                    p,
+                    snap.states.find((s) => s.plotId === p.id)!,
+                    0,
+                    r.modelVersion,
+                  ),
+                ),
+              ),
+            },
+            update: {},
+          });
         }
-      },
-    );
+        for (const s of f.scenarios.filter((s) => !old?.scenarios.some((x) => x.id === s.id)))
+          await tx.scenario.create({
+            data: {
+              id: s.id,
+              farmId: f.id,
+              config: json(s.config),
+              baseline: json(s.baseline),
+              experiment: json(s.experiment),
+            },
+          });
+      }
+    });
   }
   async close() {
     await this.queue;

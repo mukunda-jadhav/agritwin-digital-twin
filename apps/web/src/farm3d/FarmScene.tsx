@@ -13,6 +13,11 @@ import {
 import { last, plotMoisture } from '../components/common';
 import { fieldLayout } from './layout';
 import { t } from '../i18n';
+import { plantAppearance } from './growth';
+export type FieldLayer = 'natural' | 'water' | 'stress' | 'growth';
+export type CameraLink = Set<
+  (source: unknown, position: THREE.Vector3, target: THREE.Vector3) => void
+>;
 export type CameraView = 'aerial' | 'isometric' | 'close' | 'inspect' | 'boundary';
 class SceneBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
   state = { failed: false };
@@ -128,37 +133,64 @@ function PlantStand({
     fruitGeometry = useMemo(
       () =>
         crop.form === 'fruit' || crop.form === 'fiber' || crop.form === 'groundnut'
-          ? new THREE.SphereGeometry(1, 7, 5)
+          ? new THREE.SphereGeometry(1, close ? 14 : 7, close ? 10 : 5)
           : new THREE.CapsuleGeometry(
               crop.form === 'grass' ? 0.012 : 0.032,
               crop.form === 'grass' ? 0.1 : 0.16,
               3,
               6,
             ),
-      [crop.form, crop.name],
+      [crop.form, crop.name, close],
     );
   useEffect(() => () => leaf.dispose(), [leaf]);
   useEffect(() => () => stemGeometry.dispose(), [stemGeometry]);
   useEffect(() => () => fruitGeometry.dispose(), [fruitGeometry]);
+  const { invalidate } = useThree();
+  const displayed = useRef({ ...state });
+  const dirty = useRef(true);
   useLayoutEffect(() => {
-    if (!stems.current || !leaves.current || !produce.current) return;
+    dirty.current = true;
+    invalidate();
+  }, [state, points, leaf, fruitGeometry, invalidate]);
+  useFrame((_, dt) => {
+    if (!dirty.current || !stems.current || !leaves.current || !produce.current) return;
+    const visual = displayed.current;
+    const alpha = matchMedia('(prefers-reduced-motion: reduce)').matches
+      ? 1
+      : 1 - Math.exp(-Math.min(dt, 0.1) * 7);
+    let remaining = 0;
+    for (const key of ['growth', 'gdd', 'stress'] as const) {
+      visual[key] += (state[key] - visual[key]) * alpha;
+      remaining += Math.abs(state[key] - visual[key]);
+    }
+    Object.assign(visual, {
+      stage: state.stage,
+      harvestedKg: state.harvestedKg,
+      harvestReviewed: state.harvestReviewed,
+      yieldKg: state.yieldKg,
+    });
+    dirty.current = remaining > 0.002;
+    if (dirty.current) invalidate();
+    const appearance = plantAppearance(plot.crop, visual);
     const matrix = new THREE.Object3D(),
-      grown = state.stage !== 'Not planted' && state.gdd >= crop.stages[1].gdd,
-      harvested =
-        state.growth >= 1 &&
-        ((state.harvestedKg || 0) > 0 || state.harvestReviewed) &&
-        state.yieldKg - (state.harvestedKg || 0) < 0.000001,
-      height = harvested ? 0.1 : crop.maxHeight * Math.max(0.08, Math.min(1, state.growth / 0.68)),
-      mature = state.growth > 0.83,
-      leafColor = new THREE.Color(
-        state.stress > 0.65
-          ? '#8b7942'
-          : mature && crop.form !== 'fruit'
-            ? '#9c8b50'
-            : crop.form === 'grass' || crop.form === 'cane'
-              ? '#4f682f'
-              : '#536c36',
+      grown = appearance.emerged > 0.001,
+      harvested = appearance.harvested,
+      height = appearance.height,
+      mature = visual.growth > 0.83,
+      leafColor = new THREE.Color('#4f813e').lerp(
+        new THREE.Color('#a89049'),
+        appearance.stress * 0.85 + (mature && crop.form !== 'fruit' ? 0.3 : 0),
       );
+    const produceColor =
+      crop.form === 'fruit'
+        ? appearance.fruit === 0
+          ? new THREE.Color('#f6d35b')
+          : new THREE.Color('#729344').lerp(new THREE.Color('#d3482d'), appearance.ripe)
+        : new THREE.Color(crop.form === 'fiber' ? '#eee7d8' : '#91a24b').lerp(
+            new THREE.Color('#d9b861'),
+            appearance.ripe,
+          );
+    const tasselColor = new THREE.Color('#d3bb71');
     let li = 0,
       fi = 0;
     stems.current.count = grown ? points.length : 0;
@@ -178,19 +210,32 @@ function PlantStand({
       matrix.scale.set(stemRadius, h, stemRadius);
       matrix.updateMatrix();
       stems.current!.setMatrixAt(i, matrix.matrix);
-      const count = harvested ? 0 : crop.form === 'grass' || crop.form === 'cane' ? 6 : 4;
+      const count = harvested ? 0 : 6;
       for (let j = 0; j < count; j++) {
         matrix.position.set(point.x, h * (0.18 + j * 0.105), point.z);
-        matrix.rotation.set(0, j * 2.399 + point.v, crop.form === 'fruit' ? 0.5 : 0.15);
+        matrix.rotation.set(
+          appearance.stress * 0.65,
+          j * 2.399 + point.v,
+          (crop.form === 'fruit' ? 0.5 : 0.15) + appearance.stress * 0.35,
+        );
         const length =
           crop.form === 'fruit' ? h * 0.5 : crop.form === 'grass' ? h * 0.42 : h * 0.65;
-        matrix.scale.set(length, length, length);
+        const unfold = Math.max(0.001, Math.min(1, appearance.leaves - j));
+        matrix.scale.set(length * unfold, length * unfold, length * unfold);
         matrix.updateMatrix();
         leaves.current!.setMatrixAt(li, matrix.matrix);
         leaves.current!.setColorAt(li, leafColor);
         li++;
       }
-      const reproductive = state.gdd >= crop.headGdd;
+      if (crop.name === 'Maize' && appearance.fruit > 0 && !harvested) {
+        matrix.position.set(point.x, h + 0.07, point.z);
+        matrix.rotation.set(0, point.v, 0.12);
+        matrix.scale.set(0.7 * appearance.fruit, 1.6 * appearance.fruit, 0.7 * appearance.fruit);
+        matrix.updateMatrix();
+        produce.current!.setMatrixAt(fi, matrix.matrix);
+        produce.current!.setColorAt(fi++, tasselColor);
+      }
+      const reproductive = appearance.fruit > 0 || appearance.flowers > 0;
       if (
         reproductive &&
         !harvested &&
@@ -201,35 +246,27 @@ function PlantStand({
         for (let j = 0; j < countFruit; j++) {
           matrix.position.set(
             point.x + (compactHead ? 0 : Math.cos(j * 2) * 0.14),
-            crop.form === 'groundnut' ? 0.08 : compactHead ? h : h * (0.45 + j * 0.1),
+            crop.form === 'groundnut'
+              ? -0.05
+              : crop.name === 'Maize'
+                ? h * 0.65
+                : compactHead
+                  ? h
+                  : h * (0.45 + j * 0.1),
             point.z + (compactHead ? 0 : Math.sin(j * 2) * 0.14),
           );
           matrix.rotation.set(0, point.v, 0);
-          matrix.scale.setScalar(
+          const size =
             crop.form === 'fruit'
-              ? 0.025 + Math.min(0.025, state.growth * 0.03)
+              ? 0.065 * Math.max(appearance.fruit, appearance.flowers * 0.35)
               : crop.form === 'fiber' || crop.form === 'groundnut'
-                ? 0.06
-                : 0.035,
-          );
+                ? 0.06 * appearance.fruit
+                : appearance.fruit;
+          matrix.scale.set(size, size, size);
+          if (crop.name === 'Maize') matrix.scale.set(size * 1.8, size * 2, size * 1.8);
           matrix.updateMatrix();
           produce.current!.setMatrixAt(fi, matrix.matrix);
-          produce.current!.setColorAt(
-            fi,
-            new THREE.Color(
-              crop.form === 'fruit'
-                ? state.gdd >= 1150
-                  ? '#a84931'
-                  : '#75823e'
-                : crop.form === 'fiber'
-                  ? '#e5e1cf'
-                  : crop.form === 'groundnut'
-                    ? '#a98a54'
-                    : mature
-                      ? '#baa16b'
-                      : '#81904a',
-            ),
-          );
+          produce.current!.setColorAt(fi, produceColor);
           fi++;
         }
       }
@@ -241,7 +278,7 @@ function PlantStand({
       if (ref.current!.instanceColor) ref.current!.instanceColor!.needsUpdate = true;
       ref.current!.computeBoundingSphere();
     });
-  }, [crop, state, points]);
+  });
   return (
     <group>
       <instancedMesh ref={stems} args={[stemGeometry, undefined, points.length]} castShadow>
@@ -288,10 +325,12 @@ function Parcel({
   selected,
   onSelect,
   budget,
+  layer,
   close = false,
 }: {
   plot: Plot;
   state: PlotState;
+  layer: FieldLayer;
   field: ReturnType<typeof fieldLayout>['fields'][0];
   modelVersion: string;
   selected: boolean;
@@ -326,7 +365,17 @@ function Parcel({
         <boxGeometry args={[w, 0.26, d]} />
         <meshStandardMaterial
           map={soil}
-          color={water < 30 ? '#d9c5a5' : '#b0a087'}
+          color={
+            layer === 'water'
+              ? new THREE.Color('#dbad72').lerp(new THREE.Color('#368fc0'), water / 100)
+              : layer === 'stress'
+                ? new THREE.Color('#81ab69').lerp(new THREE.Color('#cc6045'), state.stress)
+                : layer === 'growth'
+                  ? new THREE.Color('#dfd1a0').lerp(new THREE.Color('#427645'), state.growth)
+                  : water < 30
+                    ? '#d9c5a5'
+                    : '#b0a087'
+          }
           roughness={1}
           bumpMap={soil}
           bumpScale={0.012}
@@ -350,11 +399,13 @@ function Parcel({
   );
 }
 function Camera({
+  cameraLink,
   view,
   layout,
   selected,
 }: {
   view: CameraView;
+  cameraLink?: CameraLink;
   layout: ReturnType<typeof fieldLayout>;
   selected: string;
 }) {
@@ -387,6 +438,24 @@ function Camera({
     invalidate();
   }, [view, selected, layout, camera, invalidate, viewport.width, viewport.height]);
   const moving = useRef(true);
+  const receiving = useRef(false);
+  useEffect(() => {
+    if (!cameraLink) return;
+    const receive = (source: unknown, nextPosition: THREE.Vector3, nextTarget: THREE.Vector3) => {
+      if (!controls.current || source === controls.current) return;
+      receiving.current = true;
+      moving.current = false;
+      camera.position.copy(nextPosition);
+      controls.current.target.copy(nextTarget);
+      controls.current.update();
+      receiving.current = false;
+      invalidate();
+    };
+    cameraLink.add(receive);
+    return () => {
+      cameraLink.delete(receive);
+    };
+  }, [cameraLink, camera, invalidate]);
   useEffect(() => {
     moving.current = true;
     invalidate();
@@ -410,6 +479,12 @@ function Camera({
       minDistance={1.8}
       maxDistance={layout.extent * 2.4}
       maxPolarAngle={Math.PI / 2.08}
+      onChange={() => {
+        if (!moving.current && !receiving.current && controls.current)
+          cameraLink?.forEach((receive) =>
+            receive(controls.current, camera.position, controls.current.target),
+          );
+      }}
       onStart={() => {
         moving.current = false;
       }}
@@ -423,6 +498,8 @@ export default function FarmScene({
   onSelect,
   view = 'isometric',
   night = false,
+  layer = 'natural',
+  cameraLink,
 }: {
   farm: Farm;
   snapshot?: Snapshot;
@@ -430,6 +507,8 @@ export default function FarmScene({
   onSelect: (id: string) => void;
   view?: CameraView;
   night?: boolean;
+  layer?: FieldLayer;
+  cameraLink?: CameraLink;
 }) {
   const layoutKey = JSON.stringify(farm.plots.map((p) => [p.id, p.area]));
   const snap = snapshot || last(farm),
@@ -529,6 +608,7 @@ export default function FarmScene({
           layout.fields.map((field) => (
             <Parcel
               key={field.id}
+              layer={layer}
               field={field}
               plot={farm.plots.find((p) => p.id === field.id)!}
               modelVersion={farm.run.modelVersion || MODEL_VERSION}
@@ -536,11 +616,11 @@ export default function FarmScene({
               selected={selected === field.id}
               onSelect={() => onSelect(field.id)}
               close={view === 'close' && selected === field.id}
-              budget={Math.max(180, Math.floor(10000 / farm.plots.length))}
+              budget={Math.max(180, Math.floor(4000 / farm.plots.length))}
             />
           ))
         )}
-        <Camera view={view} layout={layout} selected={selected} />
+        <Camera cameraLink={cameraLink} view={view} layout={layout} selected={selected} />
       </Canvas>
     </SceneBoundary>
   );

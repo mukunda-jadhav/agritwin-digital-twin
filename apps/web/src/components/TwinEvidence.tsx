@@ -13,7 +13,7 @@ export function TwinEvidence({
   return (
     <details className="twin-evidence">
       <summary>
-        <strong>{t('Twin data & assumptions')}</strong>
+        <strong>{t('Where do these numbers come from?')}</strong>
         <span>
           {t('Weather source')} · {t('Crop and soil water are model estimates')}
         </span>

@@ -137,7 +137,38 @@ export type Scenario = {
   baseline: Snapshot[];
   experiment: Snapshot[];
 };
+export type FieldObservation = {
+  id: string;
+  plotId: string;
+  runId: string;
+  date: string;
+  createdAt: string;
+  stage?: string;
+  heightCm?: number;
+  harvestedKg?: number;
+  note: string;
+  modelVersion: string;
+  snapshotId: string;
+  modeledStage: string;
+  modeledHarvestKg: number;
+};
+export const observationInput = z
+  .object({
+    id: z.string().uuid(),
+    plotId: z.string(),
+    runId: z.string(),
+    date: z.string().date(),
+    stage: z.string().max(80).optional(),
+    heightCm: z.number().min(0).max(2000).optional(),
+    harvestedKg: z.number().min(0).max(100000000).optional(),
+    note: z.string().trim().max(1000).default(''),
+  })
+  .refine(
+    (v) => v.stage || v.heightCm !== undefined || v.harvestedKg !== undefined || v.note.length > 0,
+    { message: 'Add a measurement, a stage, or a note.' },
+  );
 export type Farm = Omit<FarmInput, 'plots'> & {
+  observations?: FieldObservation[];
   economics?: {
     plotId: string;
     pricePerKg: number | null;

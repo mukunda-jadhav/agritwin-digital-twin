@@ -1,3 +1,4 @@
+import { ScenarioFields } from '../components/ScenarioFields';
 import { SoilWaterGuide, methodEfficiency } from '../components/SoilWaterGuide';
 import { isMature } from '@agritwin/shared';
 import { t } from '../i18n';
@@ -456,6 +457,7 @@ export function Analytics() {
 export function Scenarios() {
   const { farm, open } = useFarm(),
     [scenario, setScenario] = useState<Scenario | null>(null),
+    [preset, setPreset] = useState('water'),
     [field, setField] = useState<'moisture' | 'stress' | 'growth' | 'water' | 'yield'>('moisture'),
     [busy, setBusy] = useState(false),
     [error, setError] = useState('');
@@ -515,8 +517,28 @@ export function Scenarios() {
             {t('Design an experiment')}
           </h2>
           <label>
+            {t('Try a simple idea')}
+            <select value={preset} onChange={(e) => setPreset(e.target.value)}>
+              <option value="water">{t('25% less irrigation')}</option>
+              <option value="heat">{t('Warmer weather')}</option>
+              <option value="rain">{t('Reduced rainfall')}</option>
+            </select>
+          </label>
+          <label>
             {t('Experiment name')}
-            <input name="name" defaultValue="25% less irrigation" required maxLength={70} />
+            <input
+              key={preset}
+              name="name"
+              defaultValue={
+                preset === 'heat'
+                  ? 'Warmer weather'
+                  : preset === 'rain'
+                    ? 'Reduced rainfall'
+                    : '25% less irrigation'
+              }
+              required
+              maxLength={70}
+            />
           </label>
           <div className="form-grid">
             <label>
@@ -527,8 +549,9 @@ export function Scenarios() {
               {t('Temperature change (°C)')}
               <input
                 name="temperature"
+                key={'temperature-' + preset}
                 type="number"
-                defaultValue={0}
+                defaultValue={preset === 'heat' ? 2 : 0}
                 min={-10}
                 max={10}
                 step={0.5}
@@ -537,11 +560,27 @@ export function Scenarios() {
             </label>
             <label>
               {t('Rainfall (% of baseline)')}
-              <input name="rain" type="number" defaultValue={100} min={0} max={300} required />
+              <input
+                name="rain"
+                key={'rain-' + preset}
+                type="number"
+                defaultValue={preset === 'rain' ? 50 : 100}
+                min={0}
+                max={300}
+                required
+              />
             </label>
             <label>
               {t('Irrigation (% of baseline)')}
-              <input name="water" type="number" defaultValue={75} min={0} max={200} required />
+              <input
+                name="water"
+                key={'water-' + preset}
+                type="number"
+                defaultValue={preset === 'water' ? 75 : 100}
+                min={0}
+                max={200}
+                required
+              />
             </label>
           </div>
           <h3>{t('Baseline irrigation policy')}</h3>
@@ -583,6 +622,7 @@ export function Scenarios() {
                   {t('days')}
                 </span>
               </div>
+              <ScenarioFields key={scenario.id} farm={farm} scenario={scenario} />
               <label>
                 {t('Compare metric')}
                 <select value={field} onChange={(e) => setField(e.target.value as typeof field)}>

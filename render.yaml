@@ -3,7 +3,9 @@ services:
     name: agritwin-digital-twin
     runtime: node
     plan: free
-    buildCommand: npm ci && npm run build && npm run db:deploy
+    region: singapore
+    branch: main
+    buildCommand: npm ci --include=dev && npm run build && npm run db:deploy
     startCommand: npm run start -w @agritwin/api
     healthCheckPath: /api/health
     envVars:
@@ -15,12 +17,6 @@ services:
         sync: false
       - key: DIRECT_URL
         sync: false
-      - key: FIREBASE_PROJECT_ID
-        sync: false
-      - key: FIREBASE_CLIENT_EMAIL
-        sync: false
-      - key: FIREBASE_PRIVATE_KEY
-        sync: false
       - key: VITE_FIREBASE_API_KEY
         value: "AIzaSyB4-jHxYmOe_RjRDhJgBVmSY2mQ9BdYhUY"
       - key: VITE_FIREBASE_AUTH_DOMAIN
@@ -29,9 +25,10 @@ services:
         value: agridigitwin
       - key: VITE_FIREBASE_APP_ID
         value: "1:268899578497:web:3b7e7b86a2cb10ad9e1380"
-      - key: AGMARKNET_API_KEY
-        sync: false
       - key: AGMARKNET_RESOURCE_ID
         value: 9ef84268-d588-465a-a308-a864a43d0070
+      # Optional OPENAI_API_KEY, Firebase Admin and AGMARKNET_API_KEY go in the Dashboard.
+      - key: OPENAI_MODEL
+        value: gpt-4.1-mini
       - key: COOKIE_SAME_SITE
         value: lax

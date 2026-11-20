@@ -147,6 +147,29 @@ route(
   'get',
   'Crop water recommendations from the weather-driven soil-water model',
 );
+route('/farms/{id}/assistant', 'get', 'Get AI or basic guide availability for an owned farm');
+route(
+  '/farms/{id}/assistant',
+  'post',
+  'Ask about a selected plot and saved day; read-only experiment previews',
+  object(
+    {
+      plotId: { ...text, minLength: 1, maxLength: 100 },
+      snapshotId: { ...text, minLength: 1, maxLength: 100 },
+      message: { ...text, minLength: 1, maxLength: 1200 },
+      language: { enum: ['en', 'hi', 'mr'], default: 'en' },
+      history: {
+        type: 'array',
+        maxItems: 6,
+        items: object({
+          role: { enum: ['user', 'assistant'] },
+          content: { ...text, maxLength: 4000 },
+        }),
+      },
+    },
+    ['plotId', 'snapshotId', 'message'],
+  ),
+);
 route('/farms/{id}/analytics', 'get', 'Complete snapshots, irrigation events and archives');
 route(
   '/farms/{id}/threats',

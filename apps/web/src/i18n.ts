@@ -462,6 +462,62 @@ Object.assign(entries, {
   ],
 });
 Object.assign(entries, helpTranslations, {
+  'Ask about my crop': ['मेरी फसल के बारे में पूछें', 'माझ्या पिकाबद्दल विचारा'],
+  'Simple answers, in your language': ['आसान जवाब, आपकी भाषा में', 'सोपी उत्तरे, तुमच्या भाषेत'],
+  'AI assistant': ['AI सहायक', 'AI मदतनीस'],
+  'Basic guide · AI not connected': [
+    'मूल मार्गदर्शक · AI जुड़ा नहीं है',
+    'मूलभूत मार्गदर्शक · AI जोडलेले नाही',
+  ],
+  'Connecting…': ['जोड़ रहे हैं…', 'जोडत आहे…'],
+  'Your question and selected plot data are sent to OpenAI. Do not include personal details. Farm records stay unchanged.':
+    [
+      'आपका सवाल और चुने खेत का डेटा OpenAI को भेजा जाता है। निजी जानकारी न दें। खेत के रिकॉर्ड नहीं बदलेंगे।',
+      'तुमचा प्रश्न व निवडलेल्या शेताचा डेटा OpenAI कडे पाठवला जातो. वैयक्तिक माहिती देऊ नका. शेताच्या नोंदी बदलणार नाहीत.',
+    ],
+  'No API key needed. This guide explains saved values; it cannot answer open-ended questions.': [
+    'API कुंजी जरूरी नहीं। यह मार्गदर्शक सहेजे आँकड़े समझाता है; खुले सवालों के जवाब नहीं देता।',
+    'API कीची गरज नाही. हा मार्गदर्शक जतन केलेले आकडे समजावतो; मुक्त प्रश्नांची उत्तरे देत नाही.',
+  ],
+  'Does my crop need water?': ['क्या मेरी फसल को पानी चाहिए?', 'माझ्या पिकाला पाणी हवे का?'],
+  'Why is my crop stressed?': ['मेरी फसल पर तनाव क्यों है?', 'माझ्या पिकावर ताण का आहे?'],
+  'Compare 25% less water for 14 days, using 15 mm every 2 days.': [
+    'हर 2 दिन 15 मिमी पानी देते हुए, 14 दिनों तक 25% कम पानी से तुलना करें।',
+    'दर 2 दिवसांनी 15 मिमी पाणी देताना, 14 दिवसांसाठी 25% कमी पाण्याची तुलना करा.',
+  ],
+  'Crop conversation': ['फसल की बातचीत', 'पिकाबद्दल संवाद'],
+  'Experiment preview': ['प्रयोग का पूर्वावलोकन', 'प्रयोगाचा आढावा'],
+  'of usual watering': ['सामान्य सिंचाई का', 'नेहमीच्या पाण्यापैकी'],
+  'Change in water used': ['पानी के उपयोग में बदलाव', 'वापरलेल्या पाण्यात बदल'],
+  'Change in estimated yield': ['अनुमानित उपज में बदलाव', 'अंदाजित उत्पादनात बदल'],
+  'Open scenario analysis': ['प्रयोग विश्लेषण खोलें', 'प्रयोग विश्लेषण उघडा'],
+  'Why this answer?': ['यह जवाब क्यों?', 'हे उत्तर का?'],
+  'Saved day': ['सहेजा गया दिन', 'जतन केलेला दिवस'],
+  'Model estimates, not field measurements. Check your field before acting.': [
+    'मॉडल के अनुमान, खेत के माप नहीं। निर्णय से पहले खेत जाँचें।',
+    'मॉडेलचे अंदाज, शेतातील मोजमाप नाहीत. निर्णयापूर्वी शेत तपासा.',
+  ],
+  'Your question': ['आपका सवाल', 'तुमचा प्रश्न'],
+  'Thinking…': ['सोच रहे हैं…', 'विचार करत आहे…'],
+  Ask: ['पूछें', 'विचारा'],
+  'Checking your saved crop data…': [
+    'सहेजी फसल जानकारी देख रहे हैं…',
+    'जतन केलेली पीक माहिती तपासत आहे…',
+  ],
+  'Compare watering choices': ['सिंचाई विकल्पों की तुलना करें', 'पाण्याच्या पर्यायांची तुलना करा'],
+  'Could not connect. Close and try again.': [
+    'जुड़ नहीं पाए। बंद करके फिर कोशिश करें।',
+    'जोडता आले नाही. बंद करून पुन्हा प्रयत्न करा.',
+  ],
+  'The AI service is unavailable. Please try again later.': [
+    'AI सेवा उपलब्ध नहीं है। बाद में फिर कोशिश करें।',
+    'AI सेवा उपलब्ध नाही. नंतर पुन्हा प्रयत्न करा.',
+  ],
+  'Too many AI questions. Please wait a few minutes.': [
+    'बहुत सारे AI सवाल। कुछ मिनट रुकें।',
+    'खूप AI प्रश्न झाले. काही मिनिटे थांबा.',
+  ],
+
   'Watch crop growth': ['फसल की बढ़त देखें', 'पिकाची वाढ पाहा'],
   'Replay saved days. Your farm stays unchanged.': [
     'सहेजे गए दिन देखें। खेत का डेटा नहीं बदलेगा।',

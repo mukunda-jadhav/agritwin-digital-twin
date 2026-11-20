@@ -1,3 +1,10 @@
+import {
+  assistantInput,
+  assistantMode,
+  askAssistant,
+  plotContext,
+  AssistantUnavailable,
+} from './services/assistant.js';
 import { observationInput, cropFor } from '@agritwin/shared';
 import { initializeSoil } from './services/initialization.js';
 import { marketPrices, MarketUnavailable } from './services/market.js';
@@ -613,6 +620,33 @@ export async function createApp(
     });
     publish(f);
     res.status(201).json(f);
+  });
+  const assistantLimit = rateLimit({
+    windowMs: 10 * 60 * 1000,
+    limit: 15,
+    standardHeaders: 'draft-8',
+    legacyHeaders: false,
+    keyGenerator: (_req, res) => res.locals.user.id,
+    message: { error: 'Too many AI questions. Please wait a few minutes.' },
+  });
+  app.get('/api/farms/:id/assistant', (req, res) => {
+    owner(String(req.params.id), res.locals.user);
+    res.json({ mode: assistantMode() });
+  });
+  app.post('/api/farms/:id/assistant', assistantLimit, async (req, res) => {
+    const farm = structuredClone(owner(String(req.params.id), res.locals.user));
+    const question = assistantInput.parse(req.body);
+    try {
+      plotContext(farm, question);
+    } catch {
+      throw new HttpError(400, 'Selected plot or saved day no longer exists. Refresh the farm.');
+    }
+    try {
+      res.json(await askAssistant(farm, question));
+    } catch (error) {
+      if (error instanceof AssistantUnavailable) throw new HttpError(503, error.message);
+      throw error;
+    }
   });
   app.get('/api/farms/:id/predictions', async (req, res) => {
     const f = owner(String(req.params.id), res.locals.user),

@@ -35,3 +35,7 @@ The new migration removes the obsolete Farm dataMode column. Apply migrations be
 - packages/shared: farm/crop contracts and lifecycle logic.
 - docs: operating notes, model assumptions, API and teacher presentation guide.
 
+
+## Farm AI assistant
+
+Overview now includes **Ask about my crop**, with English, Hindi and Marathi answers grounded in the selected plot and saved day. Set server-side `OPENAI_API_KEY` in `apps/api/.env` (or the hosted API environment) to enable AI and read-only experiment previews. Without a key it uses a clearly labeled basic guide. See [AI setup and privacy](docs/AI_ASSISTANT.md).

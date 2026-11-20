@@ -3154,3 +3154,173 @@ textarea:focus-visible {
     line-height: 1.65;
   }
 }
+
+.farm-assistant {
+  overflow: hidden;
+  border: 1px solid #aac5b1;
+}
+.assistant-toggle {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  width: 100%;
+  padding: 20px;
+  border: 0;
+  background: #edf5eb;
+  color: #254b34;
+  text-align: left;
+  min-height: 64px;
+}
+.assistant-toggle > span {
+  flex: 1;
+  display: grid;
+  gap: 5px;
+}
+.assistant-toggle strong {
+  font-size: 17px;
+}
+.assistant-toggle small {
+  font-size: 13px;
+  color: #47634f;
+}
+.assistant-panel {
+  padding: 18px;
+}
+.assistant-panel > p {
+  font-size: 13px;
+  line-height: 1.6;
+  margin: 12px 0;
+}
+.assistant-context {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+.assistant-context .badge {
+  white-space: normal;
+}
+.assistant-suggestions {
+  display: grid;
+  gap: 8px;
+  margin: 16px 0;
+}
+.assistant-suggestions .button {
+  white-space: normal;
+  text-align: left;
+  justify-content: flex-start;
+  line-height: 1.5;
+  font-size: 14px;
+  padding: 10px 12px;
+}
+.assistant-conversation {
+  max-height: 520px;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+  scrollbar-gutter: stable;
+}
+.assistant-question {
+  background: #e8f0e7;
+  border-radius: 12px;
+  padding: 12px;
+  margin: 12px 0;
+  font-size: 15px;
+}
+.assistant-answer {
+  padding: 4px 2px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.assistant-answer > p {
+  white-space: pre-wrap;
+  font-size: 16px;
+  line-height: 1.7;
+  margin: 10px 0 14px;
+}
+.assistant-answer details {
+  margin: 10px 0;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.assistant-answer summary {
+  cursor: pointer;
+  min-height: 44px;
+  padding: 10px 0;
+  color: var(--green);
+  font-weight: 600;
+}
+.assistant-panel textarea {
+  width: 100%;
+  resize: vertical;
+  border: 1px solid #aebfb3;
+  border-radius: 10px;
+  padding: 12px;
+  font: inherit;
+  min-height: 85px;
+}
+.assistant-panel form {
+  margin: 18px 0;
+}
+.assistant-panel form > label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+.assistant-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 10px;
+}
+.assistant-actions small {
+  color: var(--muted);
+}
+.assistant-comparison {
+  background: #f5f8f2;
+  padding: 12px;
+  border-radius: 10px;
+  font-size: 14px;
+}
+.assistant-comparison dl {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  margin: 12px 0;
+}
+.assistant-comparison dd {
+  margin: 0;
+  font-weight: 600;
+}
+.assistant-comparison p {
+  margin: 8px 0;
+}
+@media (max-width: 1100px) {
+  .twin-aside > .farm-assistant {
+    grid-column: 1 / -1;
+  }
+}
+
+/* The open assistant stays beside the field instead of stretching its layout. */
+.farm-assistant:has(.assistant-panel) {
+  position: fixed;
+  z-index: 90;
+  right: 24px;
+  bottom: 24px;
+  width: min(440px, calc(100vw - 32px));
+  box-shadow: 0 16px 60px #183b3030;
+  border-radius: 16px;
+}
+.farm-assistant .assistant-panel {
+  max-height: min(68vh, 680px);
+  overflow-y: auto;
+}
+.farm-assistant .assistant-conversation {
+  max-height: none;
+  overflow: visible;
+}
+@media (max-width: 480px) {
+  .farm-assistant:has(.assistant-panel) {
+    right: 16px;
+    bottom: 16px;
+  }
+}

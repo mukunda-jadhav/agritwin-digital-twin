@@ -44,3 +44,8 @@ Connect using the session cookie and withCredentials. Send farm:join with an own
 
 One API instance owns the simulation clock. Mutations are serialized; state is saved before broadcasts. Distributed worker coordination and an event outbox are not implemented. On restart, runs pause.
 
+
+## Farm assistant
+
+- `GET /api/farms/:id/assistant`: authenticated owner-only availability (`mode`: `ai` or `guide`).
+- `POST /api/farms/:id/assistant`: authenticated owner-only question with `plotId`, `snapshotId`, `message` (1–1200 characters), optional `language` (`en`, `hi`, `mr`) and optional `history` (at most six user/assistant messages). Returns `mode`, `answer`, `evidence`, and an optional computed `comparison`. Read-only: never saves experiments or changes farm records. Rate limit: 15 requests per user per 10 minutes. Errors include 400 for invalid scope/input, 401/404 for access failures, 429 for request limits, and 503 for an unavailable AI provider.

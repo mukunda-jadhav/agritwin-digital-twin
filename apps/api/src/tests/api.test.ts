@@ -6,6 +6,8 @@ import os from 'node:os';
 import { io as client } from 'socket.io-client';
 import { createApp } from '../app.js';
 import { Store } from '../services/store.js';
+process.env.OPENAI_API_KEY = '';
+
 test('registration, ownership, irrigation, socket rooms, and persistent restart', async () => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'agritwin-test-')),
     file = path.join(dir, 'data.json'),
@@ -66,6 +68,45 @@ test('registration, ownership, irrigation, socket rooms, and persistent restart'
     );
     assert.equal(created.status, 201);
     const farm = created.data;
+    const assistantQuestion = {
+      plotId: farm.plots[0].id,
+      snapshotId: farm.run.history[0].id,
+      message: 'Does my crop need water?',
+      language: 'en',
+    };
+    assert.equal(
+      (await request(`/farms/${farm.id}/assistant`, undefined, a.cookie)).data.mode,
+      'guide',
+    );
+    assert.equal(
+      (await request(`/farms/${farm.id}/assistant`, assistantQuestion, b.cookie)).status,
+      404,
+    );
+    assert.equal((await request(`/farms/${farm.id}/assistant`, assistantQuestion)).status, 401);
+    const answer = await request(`/farms/${farm.id}/assistant`, assistantQuestion, a.cookie);
+    assert.equal(answer.status, 200);
+    assert.equal(answer.data.mode, 'guide');
+    assert.equal(
+      (
+        await request(
+          `/farms/${farm.id}/assistant`,
+          { ...assistantQuestion, plotId: 'other' },
+          a.cookie,
+        )
+      ).status,
+      400,
+    );
+    assert.equal(
+      (
+        await request(
+          `/farms/${farm.id}/assistant`,
+          { ...assistantQuestion, message: 'x'.repeat(1201) },
+          a.cookie,
+        )
+      ).status,
+      400,
+    );
+
     assert.equal((await request(`/farms/${farm.id}`, undefined, b.cookie)).status, 404);
     assert.equal(
       (

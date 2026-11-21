@@ -142,7 +142,7 @@ export function FarmAssistant({
           <p className="muted">
             {t(
               mode === 'ai'
-                ? 'Your question and selected plot data are sent to OpenAI. Do not include personal details. Farm records stay unchanged.'
+                ? 'Your question and selected plot data are sent to the configured AI provider. Do not include personal details. Farm records stay unchanged.'
                 : 'No API key needed. This guide explains saved values; it cannot answer open-ended questions.',
             )}
           </p>

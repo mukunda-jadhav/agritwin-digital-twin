@@ -5,6 +5,8 @@ import {
   askAssistant,
   plotContext,
   AssistantUnavailable,
+  assistantMode,
+  assistantProvider,
 } from '../services/assistant.js';
 import { newRun, synthetic } from '../simulation/engine.js';
 import type { Farm, Plot } from '@agritwin/shared';
@@ -44,6 +46,125 @@ const question = (farm: Farm) =>
 const message = (text: string) => ({
   status: 'completed',
   output: [{ type: 'message', content: [{ type: 'output_text', text }] }],
+});
+
+const geminiReply = (parts: object[], finishReason = 'STOP') =>
+  Response.json({ candidates: [{ finishReason, content: { role: 'model', parts } }] });
+
+test('Gemini key selection honors explicit provider and never falls back to a paid provider', () => {
+  const original = { ...process.env };
+  try {
+    delete process.env.AI_PROVIDER;
+    process.env.GEMINI_API_KEY = 'gemini-test';
+    process.env.OPENAI_API_KEY = 'openai-test';
+    assert.equal(assistantProvider(), 'gemini');
+    assert.equal(assistantMode(), 'ai');
+    process.env.AI_PROVIDER = 'openai';
+    assert.equal(assistantProvider(), 'openai');
+    process.env.AI_PROVIDER = 'gemini';
+    delete process.env.GEMINI_API_KEY;
+    assert.equal(assistantMode(), 'guide');
+  } finally {
+    for (const key of ['AI_PROVIDER', 'GEMINI_API_KEY', 'OPENAI_API_KEY']) {
+      if (original[key] === undefined) delete process.env[key];
+      else process.env[key] = original[key];
+    }
+  }
+});
+
+test('Gemini sends server-side key, localized facts and history; hides thought text', async () => {
+  const farm = fixture();
+  const result = await askAssistant(
+    farm,
+    {
+      ...question(farm),
+      language: 'mr',
+      history: [{ role: 'assistant', content: 'Earlier answer' }],
+    },
+    {
+      provider: 'gemini',
+      key: 'gemini-test',
+      fetcher: async (url, init) => {
+        assert.ok(String(url).includes('generativelanguage.googleapis.com/v1beta/models/'));
+        assert.ok(!String(url).includes('gemini-test'));
+        assert.equal((init?.headers as Record<string, string>)['x-goog-api-key'], 'gemini-test');
+        const body = JSON.parse(String(init?.body));
+        assert.equal(body.contents[0].role, 'model');
+        assert.ok(body.systemInstruction.parts[0].text.includes('Marathi'));
+        assert.ok(!JSON.stringify(body).includes('Private address'));
+        return geminiReply([{ text: 'Internal thought', thought: true }, { text: 'पाणी तपासा.' }]);
+      },
+    },
+  );
+  assert.equal(result.answer, 'पाणी तपासा.');
+  assert.equal(result.mode, 'ai');
+});
+
+test('Gemini preview preserves signatures and call IDs and does not mutate saved data', async () => {
+  const farm = fixture(),
+    before = JSON.stringify(farm);
+  let requests = 0;
+  const part = {
+    thoughtSignature: 'signature',
+    functionCall: {
+      id: 'preview-1',
+      name: 'preview_scenario',
+      args: {
+        name: 'Less water',
+        days: 2,
+        rainMultiplier: 1,
+        temperatureDelta: 0,
+        irrigationMultiplier: 0.5,
+        interval: 1,
+        amount: 15,
+      },
+    },
+  };
+  const result = await askAssistant(farm, question(farm), {
+    provider: 'gemini',
+    key: 'test',
+    weather: async () =>
+      [synthetic('2026-01-02'), synthetic('2026-01-03')].map((w) => ({
+        ...w,
+        source: 'historical' as const,
+      })),
+    fetcher: async (_url, init) => {
+      if (++requests === 1) return geminiReply([part]);
+      const body = JSON.parse(String(init?.body));
+      assert.deepEqual(body.contents.at(-2).parts, [part]);
+      assert.equal(body.toolConfig.functionCallingConfig.mode, 'NONE');
+      const response = body.contents.at(-1).parts[0].functionResponse;
+      assert.equal(response.id, 'preview-1');
+      assert.ok(
+        response.response.result.experiment.additionalWaterLitres <
+          response.response.result.baseline.additionalWaterLitres,
+      );
+      return geminiReply([{ text: 'The preview estimates less water.' }]);
+    },
+  });
+  assert.equal(requests, 2);
+  assert.ok('comparison' in result);
+  assert.equal(JSON.stringify(farm), before);
+});
+
+test('Gemini rejects quota errors, blocked, incomplete, empty and unknown-tool replies', async () => {
+  for (const response of [
+    Response.json({ error: 'private error' }, { status: 429 }),
+    Response.json({ promptFeedback: { blockReason: 'SAFETY' } }),
+    geminiReply([{ text: 'truncated' }], 'MAX_TOKENS'),
+    geminiReply([]),
+    geminiReply([{ functionCall: { name: 'delete_farm', args: {} } }]),
+  ]) {
+    const farm = fixture();
+    await assert.rejects(
+      askAssistant(farm, question(farm), {
+        provider: 'gemini',
+        key: 'test',
+        fetcher: async () => response,
+      }),
+      AssistantUnavailable,
+    );
+  }
 });
 test('no-key guide uses saved facts and never contacts an AI provider', async () => {
   const farm = fixture();

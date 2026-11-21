@@ -470,10 +470,10 @@ Object.assign(entries, helpTranslations, {
     'मूलभूत मार्गदर्शक · AI जोडलेले नाही',
   ],
   'Connecting…': ['जोड़ रहे हैं…', 'जोडत आहे…'],
-  'Your question and selected plot data are sent to OpenAI. Do not include personal details. Farm records stay unchanged.':
+  'Your question and selected plot data are sent to the configured AI provider. Do not include personal details. Farm records stay unchanged.':
     [
-      'आपका सवाल और चुने खेत का डेटा OpenAI को भेजा जाता है। निजी जानकारी न दें। खेत के रिकॉर्ड नहीं बदलेंगे।',
-      'तुमचा प्रश्न व निवडलेल्या शेताचा डेटा OpenAI कडे पाठवला जातो. वैयक्तिक माहिती देऊ नका. शेताच्या नोंदी बदलणार नाहीत.',
+      'आपका सवाल और चुने खेत का डेटा AI सेवा को भेजा जाता है। निजी जानकारी न दें। खेत के रिकॉर्ड नहीं बदलेंगे।',
+      'तुमचा प्रश्न व निवडलेल्या शेताचा डेटा AI सेवेकडे पाठवला जातो. वैयक्तिक माहिती देऊ नका. शेताच्या नोंदी बदलणार नाहीत.',
     ],
   'No API key needed. This guide explains saved values; it cannot answer open-ended questions.': [
     'API कुंजी जरूरी नहीं। यह मार्गदर्शक सहेजे आँकड़े समझाता है; खुले सवालों के जवाब नहीं देता।',

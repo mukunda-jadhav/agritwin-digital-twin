@@ -15,6 +15,14 @@ Use `apps/api/.env.example` as a template without overwriting existing settings.
 
 Without a key, the panel explicitly says **Basic guide · AI not connected**. This mode displays deterministic saved water/stress explanations in the selected language. It does not interpret free-form questions or pretend to be an AI model. An invalid key or provider outage produces an error, not a silently substituted AI answer.
 
+## Gemini (free-tier option)
+
+Set `GEMINI_API_KEY` on the Render service and save/redeploy. The default `GEMINI_MODEL` is `gemini-2.5-flash-lite`. No browser key or Firebase key is used for AI.
+
+Gemini is selected automatically when its key is present. Optionally set `AI_PROVIDER=gemini` or `AI_PROVIDER=openai` to explicitly select a provider. A missing key for the selected provider uses the basic guide. Provider errors never switch to another paid provider.
+
+Free-tier availability and quotas are controlled by Google, not AgriTwin. Use a free-tier project for free usage; enabling billing can incur charges. Free-tier prompts and replies may be used to improve Google products, so use demo data. See [Gemini pricing](https://ai.google.dev/gemini-api/docs/pricing).
+
 ## What it can do
 
 - Explain saved crop stage, water balance, stress, estimated yield and numeric field observations.
@@ -26,7 +34,7 @@ The AI requests an explicit baseline amount and interval when they are missing. 
 
 ## Privacy and limits
 
-The backend sends the question, up to six short conversation messages, crop/soil/area/method, saved model state, weather and recent numeric observations to OpenAI. It omits account identity, farm/plot names, coordinates, addresses, observation free text and credentials. Users should not put personal information in their questions. Responses are requested with `store: false`; this is not a promise of zero provider retention. Conversations are held in browser component memory, not saved to AgriTwin's database.
+The backend sends the question, up to six short conversation messages, crop/soil/area/method, saved model state, weather and recent numeric observations to the selected AI provider (Google Gemini or OpenAI). It omits account identity, farm/plot names, coordinates, addresses, observation free text and credentials. Users should not put personal information in their questions. OpenAI responses are requested with `store: false`; Gemini uses stateless `generateContent` requests; this is not a promise of zero provider retention. Conversations are held in browser component memory, not saved to AgriTwin's database.
 
 All farm routes require the existing session, ownership and Origin checks. AI requests are limited to 15 per user per 10 minutes, a 1,200-character question, six bounded history messages, at most two model calls and one scenario tool call. Provider calls have 25-second timeouts. Provider errors are not exposed to the browser. Model text renders as plain text, never HTML. The model has no browsing, image diagnosis, file access or mutation tools.
 

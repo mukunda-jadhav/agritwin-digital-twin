@@ -27,6 +27,7 @@ model Farm {
   boundary Json?
   economics Json?
   observations Json?
+  diary Json?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   plots Plot[]

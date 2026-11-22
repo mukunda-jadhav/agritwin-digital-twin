@@ -78,6 +78,17 @@ test('PostgreSQL migration and Prisma persist/reload normalized farm history', a
           modeledHarvestKg: 0,
         },
       ];
+      f.diary = [
+        {
+          id: 'diary-entry',
+          date: '2026-01-02',
+          kind: 'expense',
+          category: 'Seeds',
+          note: 'Bought seed',
+          amountPaise: 125050,
+          createdAt: new Date().toISOString(),
+        },
+      ];
     });
     assert.equal(await store.db!.simulationSnapshot.count(), 3);
     assert.equal(await store.db!.weatherRecord.count(), 1);
@@ -94,6 +105,7 @@ test('PostgreSQL migration and Prisma persist/reload normalized farm history', a
     const restored = new Store('unused', url);
     await restored.init();
     assert.equal(restored.data.farms[0].observations?.[0].heightCm, 5);
+    assert.equal(restored.data.farms[0].diary?.[0].amountPaise, 125050);
     assert.deepEqual(
       JSON.parse(JSON.stringify(current(restored.data.farms[0].run).states)),
       JSON.parse(JSON.stringify(saved.states)),

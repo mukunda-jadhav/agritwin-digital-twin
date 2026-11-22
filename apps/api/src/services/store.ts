@@ -136,6 +136,7 @@ export class Store {
           area: f.area,
           unit: f.unit,
           observations: f.observations ? json(f.observations) : Prisma.JsonNull,
+          diary: f.diary ? json(f.diary) : Prisma.JsonNull,
           economics: f.economics ? json(f.economics) : Prisma.JsonNull,
           boundary: f.boundary ? json(f.boundary) : Prisma.JsonNull,
         };

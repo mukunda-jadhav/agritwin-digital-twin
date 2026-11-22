@@ -68,6 +68,37 @@ test('registration, ownership, irrigation, socket rooms, and persistent restart'
     );
     assert.equal(created.status, 201);
     const farm = created.data;
+    const diary = {
+      id: crypto.randomUUID(),
+      date: '2026-01-02',
+      kind: 'expense',
+      category: 'Seeds',
+      note: 'Seed purchase',
+      amountPaise: 125050,
+    };
+    assert.equal((await request(`/farms/${farm.id}/diary`, diary, b.cookie)).status, 404);
+    assert.equal((await request(`/farms/${farm.id}/diary`, diary)).status, 401);
+    assert.equal(
+      (await request(`/farms/${farm.id}/diary`, { ...diary, amountPaise: -1 }, a.cookie)).status,
+      400,
+    );
+    assert.equal((await request(`/farms/${farm.id}/diary`, diary, a.cookie)).status, 201);
+    const repeated = await request(`/farms/${farm.id}/diary`, diary, a.cookie);
+    assert.equal(repeated.data.diary.length, 1);
+    assert.equal(repeated.data.diary[0].amountPaise, 125050);
+    assert.equal(
+      (await request(`/farms/${farm.id}/diary`, { ...diary, amountPaise: 400 }, a.cookie)).status,
+      409,
+    );
+    assert.equal(
+      (await request(`/farms/${farm.id}/diary/${diary.id}`, undefined, b.cookie, 'DELETE')).status,
+      404,
+    );
+    assert.equal(
+      (await request(`/farms/${farm.id}/diary/${diary.id}`, undefined, a.cookie, 'DELETE')).data
+        .diary.length,
+      0,
+    );
     const assistantQuestion = {
       plotId: farm.plots[0].id,
       snapshotId: farm.run.history[0].id,

@@ -6,6 +6,7 @@ apps/api/data/
 apps/api/models/
 playwright-report/
 test-results/
+offline-test-results/
 *.log
 work/
 *.tsbuildinfo

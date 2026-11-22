@@ -1,3 +1,4 @@
+import { farmerTranslations } from './farmer-translations';
 import i18n from 'i18next';
 import { helpTranslations } from './help-translations';
 import { initReactI18next } from 'react-i18next';
@@ -613,6 +614,7 @@ Object.assign(entries, helpTranslations, {
     'नोंदवलेली कापणी वजा मॉडेलची एकूण कापणी',
   ],
 });
+Object.assign(entries, farmerTranslations);
 const en = Object.fromEntries(Object.keys(entries).map((k) => [k, k])),
   hi = Object.fromEntries(Object.entries(entries).map(([k, v]) => [k, v[0]])),
   mr = Object.fromEntries(Object.entries(entries).map(([k, v]) => [k, v[1]]));

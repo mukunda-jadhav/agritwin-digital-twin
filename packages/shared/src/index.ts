@@ -167,7 +167,29 @@ export const observationInput = z
     (v) => v.stage || v.heightCm !== undefined || v.harvestedKg !== undefined || v.note.length > 0,
     { message: 'Add a measurement, a stage, or a note.' },
   );
+export const diaryInput = z
+  .object({
+    id: z.string().uuid(),
+    date: z.string().date(),
+    kind: z.enum(['note', 'expense']),
+    category: z
+      .enum(['Seeds', 'Fertilizer', 'Labour', 'Water', 'Transport', 'Other'])
+      .default('Other'),
+    note: z.string().trim().min(1).max(1000),
+    amountPaise: z.number().int().min(0).max(10000000000).default(0),
+  })
+  .superRefine((v, ctx) => {
+    if ((v.kind === 'expense' && v.amountPaise === 0) || (v.kind === 'note' && v.amountPaise !== 0))
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['amountPaise'],
+        message: 'Enter a positive expense amount; notes have no cost.',
+      });
+  });
+export type DiaryInput = z.infer<typeof diaryInput>;
+export type DiaryEntry = DiaryInput & { createdAt: string };
 export type Farm = Omit<FarmInput, 'plots'> & {
+  diary?: DiaryEntry[];
   observations?: FieldObservation[];
   economics?: {
     plotId: string;

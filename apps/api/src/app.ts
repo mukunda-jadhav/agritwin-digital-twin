@@ -5,7 +5,7 @@ import {
   plotContext,
   AssistantUnavailable,
 } from './services/assistant.js';
-import { observationInput, cropFor } from '@agritwin/shared';
+import { observationInput, diaryInput, cropFor } from '@agritwin/shared';
 import { initializeSoil } from './services/initialization.js';
 import { marketPrices, MarketUnavailable } from './services/market.js';
 import { seasonState, isMature } from '@agritwin/shared';
@@ -620,6 +620,32 @@ export async function createApp(
     });
     publish(f);
     res.status(201).json(f);
+  });
+  app.post('/api/farms/:id/diary', async (req, res) => {
+    const entry = diaryInput.parse(req.body);
+    const farm = await store.transaction(() => {
+      const farm = owner(String(req.params.id), res.locals.user);
+      const existing = farm.diary?.find((item) => item.id === entry.id);
+      if (existing) {
+        if (JSON.stringify(diaryInput.parse(existing)) !== JSON.stringify(entry))
+          throw new HttpError(409, 'This diary entry was already saved with different details.');
+        return farm;
+      }
+      if ((farm.diary?.length || 0) >= 5000) throw new HttpError(400, 'Diary limit reached. Export your records.');
+      (farm.diary ||= []).push({ ...entry, createdAt: new Date().toISOString() });
+      return farm;
+    });
+    publish(farm);
+    res.status(201).json(farm);
+  });
+  app.delete('/api/farms/:id/diary/:entryId', async (req, res) => {
+    const farm = await store.transaction(() => {
+      const farm = owner(String(req.params.id), res.locals.user);
+      farm.diary = (farm.diary || []).filter((entry) => entry.id !== req.params.entryId);
+      return farm;
+    });
+    publish(farm);
+    res.json(farm);
   });
   const assistantLimit = rateLimit({
     windowMs: 10 * 60 * 1000,

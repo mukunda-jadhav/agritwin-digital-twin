@@ -17,6 +17,7 @@ import {
   MapPinned,
   X,
   ShieldCheck,
+  NotebookPen,
 } from 'lucide-react';
 import { Auth, Landing, Brand } from './pages/Auth';
 import { Farms, Settings } from './pages/Farms';
@@ -35,9 +36,13 @@ import { firebaseLogout } from './services/firebase';
 import { Button } from './components/ui/button';
 import { LanguageSelect } from './components/Language';
 import { t } from './i18n';
+import { OfflineAccess } from './components/OfflineAccess';
+import { Diary } from './pages/Diary';
+import { restoreOfflineAccount, clearOffline, lockOffline, offlineData } from './services/offline';
 const nav = [
   { path: '/app', label: 'Overview', icon: LayoutDashboard },
   { path: '/app/farms', label: 'My farms', icon: MapPinned },
+  { path: '/app/diary', label: 'Farm diary', icon: NotebookPen },
   { path: '/app/analytics', label: 'Farm analytics', icon: BarChart3 },
   { path: '/app/irrigation', label: 'Irrigation', icon: Droplets },
   { path: '/app/insights', label: 'Crop advice', icon: Leaf },
@@ -48,11 +53,12 @@ export default function App() {
   useTranslation();
   const [loading, setLoading] = useState(true);
   useEffect(() => {
-    api('/auth/me')
+    restoreOfflineAccount()
+      .then(() => api('/auth/me'))
       .then((r) => useFarm.getState().setUser(r.user))
       .catch(() => {})
       .finally(() => setLoading(false));
-    const expired = () => useFarm.getState().setUser(null);
+    const expired = () => useFarm.setState({ user: null, farm: null, farms: [] });
     window.addEventListener('agritwin:session-expired', expired);
     return () => window.removeEventListener('agritwin:session-expired', expired);
   }, []);
@@ -123,7 +129,7 @@ function Shell() {
     };
   }, [farm?.id, user?.id]);
   if (!user) return <Navigate to="/login" replace />;
-  const noFarm = !farm && !loading && !['/app/farms', '/app/create'].includes(location.pathname);
+  const noFarm = !farm && !loading && !['/app/farms', '/app/create', '/app/insights'].includes(location.pathname);
   return (
     <div className="app-shell">
       <a className="skip-link" href="#main-content">
@@ -161,7 +167,15 @@ function Shell() {
             className="user-block"
             onClick={async () => {
               try {
+                const saved = await offlineData();
+                if (
+                  saved?.drafts.length &&
+                  !window.confirm(t('Unsynced drafts will be removed from this device. Continue?'))
+                )
+                  return;
                 await post('/auth/logout', {});
+                await clearOffline();
+                await lockOffline();
                 await firebaseLogout();
                 useFarm.setState({ user: null, farm: null, farms: [] });
               } catch (e) {
@@ -220,6 +234,7 @@ function Shell() {
           </div>
         </header>
         <main id="main-content" className="main-content">
+          <OfflineAccess />
           {error && (
             <div className="error" role="alert">
               <span>{t(error)}</span>
@@ -248,6 +263,7 @@ function Shell() {
               <Routes>
                 <Route index element={<Twin />} />
                 <Route path="farms" element={<Farms />} />
+                <Route path="diary" element={<Diary />} />
                 <Route path="create" element={<CreateFarm />} />
                 <Route path="twin" element={<Twin expanded />} />
                 <Route path="analytics" element={<Analytics />} />

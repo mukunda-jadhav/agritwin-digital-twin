@@ -1,4 +1,5 @@
 import { ScenarioFields } from '../components/ScenarioFields';
+import { SeasonGuide } from '../components/SeasonGuide';
 import { SoilWaterGuide, methodEfficiency } from '../components/SoilWaterGuide';
 import { isMature } from '@agritwin/shared';
 import { t } from '../i18n';
@@ -297,7 +298,7 @@ export function Insights() {
         .then(setPredictions)
         .catch((e) => setError(e.message));
   }, [farm?.id, farm?.run.version]);
-  if (!farm) return null;
+  if (!farm) return <SeasonGuide />;
   return (
     <>
       <div className="page-heading">
@@ -305,6 +306,7 @@ export function Insights() {
         <h1>{t('Crop decision support')}</h1>
         <p>{t('Understand the signals behind your farm’s simulated performance.')}</p>
       </div>
+      <SeasonGuide />
       <div className="notice">
         <Leaf size={20} />
         <div>

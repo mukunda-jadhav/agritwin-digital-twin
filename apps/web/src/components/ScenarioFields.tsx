@@ -7,10 +7,10 @@ import { t } from '../i18n';
 const FarmScene = lazy(() => import('../farm3d/FarmScene'));
 
 export function ScenarioFields({ farm, scenario }: { farm: Farm; scenario: Scenario }) {
-  const [index, setIndex] = useState(0);
+  const [index, setIndex] = useState(() => Math.max(0, Math.min(scenario.baseline.length, scenario.experiment.length) - 1));
   const [cameraLink] = useState<CameraLink>(() => new Set());
   const [view, setView] = useState<CameraView>('isometric');
-  const [layer, setLayer] = useState<FieldLayer>('natural');
+  const [layer, setLayer] = useState<FieldLayer>('water');
   const [selected, setSelected] = useState(farm.plots[0].id);
   const a = scenario.baseline[index],
     b = scenario.experiment[index];
@@ -20,7 +20,7 @@ export function ScenarioFields({ farm, scenario }: { farm: Farm; scenario: Scena
   return (
     <section className="scenario-fields">
       <h3>{t('Watch both choices')}</h3>
-      <p className="muted">{t('Same starting field. Two different choices.')}</p>
+      <p className="muted">{t('Final comparison first. Play growth to watch from the start.')}</p>
       <div className="layer-toolbar">
         <label>
           {t('Select plot')}

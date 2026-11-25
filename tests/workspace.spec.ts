@@ -275,6 +275,12 @@ test('field workspace, replay, notebook and scenario comparison', async ({ page 
   await page.getByRole('heading', { name: 'Watch both choices' }).waitFor();
   await page.locator('canvas').nth(1).waitFor();
   assert.equal(await page.locator('canvas').count(), 2);
+  const scenarioDay = page.getByRole('slider', { name: 'Choose a saved day' });
+  assert.equal(await scenarioDay.inputValue(), await scenarioDay.getAttribute('max'));
+  assert.equal(await page.getByLabel('Show on field', { exact: true }).inputValue(), 'water');
+  await page.getByRole('button', { name: 'Play growth', exact: true }).click();
+  await page.getByRole('button', { name: 'Pause replay', exact: true }).click();
+  assert.ok(Number(await scenarioDay.inputValue()) < Number(await scenarioDay.getAttribute('max')));
   await page.getByLabel('Camera', { exact: true }).selectOption('close');
   await page.getByRole('slider', { name: 'Choose a saved day' }).fill('30');
   await page.waitForTimeout(1500);

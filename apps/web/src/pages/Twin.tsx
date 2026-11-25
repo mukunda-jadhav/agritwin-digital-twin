@@ -1,4 +1,3 @@
-import { FarmAssistant } from '../components/FarmAssistant';
 import { SeasonTimeline } from '../components/SeasonTimeline';
 import { SoilCutaway } from '../components/SoilCutaway';
 import { FieldNotes } from '../components/FieldNotes';
@@ -408,12 +407,7 @@ export function Twin({ expanded = false }: { expanded?: boolean }) {
           )}
         </section>
         <aside className="twin-aside">
-          <FarmAssistant
-            key={farm.id + farm.run.id + plot.id + snap.id}
-            farm={farm}
-            plot={plot}
-            snapshot={snap}
-          />
+
           <section className="card condition-card">
             <div className="section-heading">
               <h2>{t('Plot condition')}</h2>

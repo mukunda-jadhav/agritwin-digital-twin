@@ -105,45 +105,10 @@ test('registration, ownership, irrigation, socket rooms, and persistent restart'
         .diary.length,
       0,
     );
-    const assistantQuestion = {
-      plotId: farm.plots[0].id,
-      snapshotId: farm.run.history[0].id,
-      message: 'Does my crop need water?',
-      language: 'en',
-    };
-    assert.equal(
-      (await request(`/farms/${farm.id}/assistant`, undefined, a.cookie)).data.mode,
-      'guide',
-    );
-    assert.equal(
-      (await request(`/farms/${farm.id}/assistant`, assistantQuestion, b.cookie)).status,
-      404,
-    );
-    assert.equal((await request(`/farms/${farm.id}/assistant`, assistantQuestion)).status, 401);
-    const answer = await request(`/farms/${farm.id}/assistant`, assistantQuestion, a.cookie);
-    assert.equal(answer.status, 200);
-    assert.equal(answer.data.mode, 'guide');
-    assert.equal(
-      (
-        await request(
-          `/farms/${farm.id}/assistant`,
-          { ...assistantQuestion, plotId: 'other' },
-          a.cookie,
-        )
-      ).status,
-      400,
-    );
-    assert.equal(
-      (
-        await request(
-          `/farms/${farm.id}/assistant`,
-          { ...assistantQuestion, message: 'x'.repeat(1201) },
-          a.cookie,
-        )
-      ).status,
-      400,
-    );
-
+    assert.equal((await request(`/farms/${farm.id}/assistant`, undefined, a.cookie)).status, 410);
+    assert.equal((await request(`/farms/${farm.id}/assistant`, { message: 'test' }, a.cookie)).status, 410);
+    assert.equal((await request(`/farms/${farm.id}/assistant`, undefined, b.cookie)).status, 404);
+    assert.equal((await request(`/farms/${farm.id}/assistant`)).status, 401);
     assert.equal((await request(`/farms/${farm.id}`, undefined, b.cookie)).status, 404);
     assert.equal(
       (

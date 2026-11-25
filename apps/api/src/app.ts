@@ -1,11 +1,4 @@
-import {
-  assistantInput,
-  assistantMode,
-  assistantProvider,
-  askAssistant,
-  plotContext,
-  AssistantUnavailable,
-} from './services/assistant.js';
+
 import { observationInput, diaryInput, cropFor } from '@agritwin/shared';
 import { initializeSoil } from './services/initialization.js';
 import { marketPrices, MarketUnavailable } from './services/market.js';
@@ -650,35 +643,10 @@ export async function createApp(
     publish(farm);
     res.json(farm);
   });
-  const assistantLimit = rateLimit({
-    windowMs: 10 * 60 * 1000,
-    limit: 15,
-    standardHeaders: 'draft-8',
-    legacyHeaders: false,
-    keyGenerator: (_req, res) => res.locals.user.id,
-    message: { error: 'Too many AI questions. Please wait a few minutes.' },
-  });
-  app.get('/api/farms/:id/assistant', (req, res) => {
+  // Retired endpoint: old browser tabs must not trigger provider requests.
+  app.all('/api/farms/:id/assistant', (req, res) => {
     owner(String(req.params.id), res.locals.user);
-    res.json({ mode: assistantMode() });
-  });
-  app.post('/api/farms/:id/assistant', assistantLimit, async (req, res) => {
-    const farm = structuredClone(owner(String(req.params.id), res.locals.user));
-    const question = assistantInput.parse(req.body);
-    try {
-      plotContext(farm, question);
-    } catch {
-      throw new HttpError(400, 'Selected plot or saved day no longer exists. Refresh the farm.');
-    }
-    try {
-      res.json(await askAssistant(farm, question));
-    } catch (error) {
-      if (error instanceof AssistantUnavailable) {
-        log.warn({ provider: assistantProvider(), providerStatus: error.providerStatus || null }, 'AI provider request failed');
-        throw new HttpError(503, error.message);
-      }
-      throw error;
-    }
+    res.status(410).json({ error: 'The AI chatbot has been removed. Use Crop advice or Scenario analysis.' });
   });
   app.get('/api/farms/:id/predictions', async (req, res) => {
     const f = owner(String(req.params.id), res.locals.user),

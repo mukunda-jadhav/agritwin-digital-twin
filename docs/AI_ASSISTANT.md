@@ -1,3 +1,9 @@
+# Retired chatbot
+
+The chatbot was removed from the website on 25 November 2026. Its API returns 410 and makes no provider requests. Crop advice, crop health and scenario analysis remain available.
+
+The following is historical implementation documentation, not an available feature.
+
 # Ask AgriTwin
 
 Open a farm's Overview and select **Ask about my crop**. The assistant uses the selected plot and the exact saved day being viewed, including historical replay. Suggested questions, plain-text answers, a source-details disclosure and the existing read-aloud control support English, Hindi and Marathi. Changing the plot, season or saved day clears the conversation so old answers are not presented as current advice.

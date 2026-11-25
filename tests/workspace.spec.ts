@@ -117,64 +117,13 @@ test('field workspace, replay, notebook and scenario comparison', async ({ page 
     observations: [],
     createdAt: '2026-01-01',
   };
-  let aiMode = false;
-  let aiFails = false;
   await page.route('**/socket.io/**', (r) => r.abort());
   await page.route('**/api/**', async (route) => {
     const path = new URL(route.request().url()).pathname;
     let data = {};
     if (path.endsWith('/auth/me'))
       data = { user: { id: 'user', name: 'Demo farmer', email: 'demo@example.com' } };
-    else if (path.endsWith('/assistant')) {
-      if (route.request().method() === 'POST' && aiFails) {
-        await route.fulfill({
-          status: 503,
-          json: { error: 'The AI service is unavailable. Please try again later.' },
-        });
-        return;
-      }
-      data =
-        route.request().method() === 'GET'
-          ? { mode: aiMode ? 'ai' : 'guide' }
-          : {
-              mode: aiMode ? 'ai' : 'guide',
-              answer: aiMode
-                ? 'This simulated comparison used less water. Check your field before acting.'
-                : 'This is the basic guide, not an AI answer. Check the soil in your field.',
-              evidence: {
-                date: '2026-02-09',
-                modelVersion: 'agritwin-maharashtra-v3',
-                weatherSource: 'historical',
-                availableWaterPercent: 40,
-                stressPercent: 39,
-              },
-              ...(aiMode
-                ? {
-                    comparison: {
-                      config: {
-                        days: 14,
-                        amount: 15,
-                        interval: 2,
-                        irrigationMultiplier: 0.75,
-                        rainMultiplier: 1,
-                        temperatureDelta: 0,
-                      },
-                      baseline: {
-                        additionalWaterLitres: 1500,
-                        modeledYieldKg: 10,
-                        stressPercent: 10,
-                      },
-                      experiment: {
-                        additionalWaterLitres: 1125,
-                        modeledYieldKg: 9,
-                        stressPercent: 20,
-                      },
-                      weatherSources: ['historical'],
-                    },
-                  }
-                : {}),
-            };
-    } else if (path.endsWith('/health')) data = { storage: 'local-file' };
+    else if (path.endsWith('/health')) data = { storage: 'local-file' };
     else if (path.endsWith('/weather')) data = farm.run.weather;
     else if (path.endsWith('/predictions'))
       data = plots.map((p) => ({
@@ -222,39 +171,7 @@ test('field workspace, replay, notebook and scenario comparison', async ({ page 
   await page.getByLabel('Replay speed', { exact: true }).selectOption('0.5');
   await page.getByLabel('Replay speed', { exact: true }).selectOption('4');
   await page.locator('.field-picker select').first().selectOption('p1');
-  await page.getByRole('button', { name: 'Ask about my crop', exact: false }).click();
-  await page.getByText('Basic guide · AI not connected', { exact: true }).waitFor();
-  await page.getByRole('button', { name: 'Does my crop need water?', exact: true }).click();
-  await page
-    .getByText('This is the basic guide, not an AI answer. Check the soil in your field.', {
-      exact: true,
-    })
-    .waitFor();
-  await page.getByText('Why this answer?', { exact: true }).click();
-  await page.getByRole('button', { name: 'Ask about my crop', exact: false }).click();
-  aiMode = true;
-  await page.getByRole('button', { name: 'Ask about my crop', exact: false }).click();
-  await page.getByText('AI assistant', { exact: true }).waitFor();
-  await page
-    .getByRole('button', {
-      name: 'Compare 25% less water for 14 days, using 15 mm every 2 days.',
-      exact: true,
-    })
-    .click();
-  await page.getByText('Experiment preview', { exact: true }).waitFor();
-  await page.screenshot({ path: testInfo.outputPath('assistant.png'), fullPage: true });
-  aiFails = true;
-  await page.getByLabel('Your question', { exact: true }).fill('Explain this result');
-  await page.getByRole('button', { name: 'Ask', exact: true }).click();
-  await page.getByRole('alert').filter({ hasText: 'The AI service is unavailable.' }).waitFor();
-  aiFails = false;
-
-  await page.getByRole('button', { name: 'Ask about my crop', exact: false }).click();
-
-  await page.waitForTimeout(2000);
-  await page.screenshot({ path: testInfo.outputPath('desktop.png'), fullPage: true });
-  await page.getByRole('button', { name: 'Look under soil' }).click();
-  await page.getByRole('heading', { name: 'Under the soil' }).waitFor();
+  assert.equal(await page.getByRole('button', { name: 'Ask about my crop', exact: false }).count(), 0);
   await page.getByRole('button', { name: 'Play growth', exact: true }).click();
   await page.waitForTimeout(1300);
   await page.getByRole('button', { name: 'Pause replay', exact: true }).click();

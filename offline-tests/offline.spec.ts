@@ -72,6 +72,6 @@ test('saved farm reload, offline diary sync, expenses, mobile guide and account 
   await expect(page.getByText('Offline test farm', { exact: true })).toHaveCount(0);
   await context.setOffline(true);
   await page.reload();
-  await expect(page).toHaveURL(/\/login$/);
+  await expect(page.getByRole('heading', { name: 'Could not connect' })).toBeVisible();
   await expect(page.getByText('Offline test farm', { exact: true })).toHaveCount(0);
 });

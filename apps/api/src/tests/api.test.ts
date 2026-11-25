@@ -68,6 +68,12 @@ test('registration, ownership, irrigation, socket rooms, and persistent restart'
     );
     assert.equal(created.status, 201);
     const farm = created.data;
+    const fast = await request(`/farms/${farm.id}/control`, { action: 'speed', speed: 30 }, a.cookie);
+    assert.equal(fast.status, 200);
+    assert.equal(fast.data.run.speed, 30);
+    assert.deepEqual(fast.data.run.history, farm.run.history);
+    assert.equal((await request(`/farms/${farm.id}/control`, { action: 'speed', speed: 31 }, a.cookie)).status, 400);
+    assert.equal((await request(`/farms/${farm.id}/control`, { action: 'speed', speed: 30 }, b.cookie)).status, 404);
     const diary = {
       id: crypto.randomUUID(),
       date: '2026-01-02',

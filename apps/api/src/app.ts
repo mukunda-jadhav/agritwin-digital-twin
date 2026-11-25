@@ -234,6 +234,8 @@ export async function createApp(
       linkedUserId = decode(req.cookies.session).sub;
     } catch {}
     const user = await store.transaction((data) => {
+      if (linkedUserId && data.users.find((u) => u.id === linkedUserId)?.email !== identity.email)
+        throw new HttpError(409, 'Choose the Google account with the same email as your signed-in account.');
       const existing = data.users.find((u) => u.firebaseUid === identity.uid);
       if (existing) return existing;
       const emailMatch = data.users.find((u) => u.email === identity.email);
@@ -466,7 +468,7 @@ export async function createApp(
       .object({
         action: z.enum(['start', 'pause', 'step', 'reset', 'speed']),
         days: z.number().int().min(1).max(120).default(1),
-        speed: z.number().int().min(1).max(10).default(1),
+        speed: z.number().int().min(1).max(30).default(1),
       })
       .parse(req.body);
     const f = await store.transaction(async () => {

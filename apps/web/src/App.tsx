@@ -31,7 +31,7 @@ const Insights = lazy(() => import('./pages/Manage').then((m) => ({ default: m.I
 const Irrigation = lazy(() => import('./pages/Manage').then((m) => ({ default: m.Irrigation })));
 const Scenarios = lazy(() => import('./pages/Manage').then((m) => ({ default: m.Scenarios })));
 import { useFarm } from './stores/useFarm';
-import { API, api, post } from './services/api';
+import { API, api, post, ApiError } from './services/api';
 import { firebaseLogout } from './services/firebase';
 import { Button } from './components/ui/button';
 import { LanguageSelect } from './components/Language';
@@ -52,16 +52,24 @@ const nav = [
 export default function App() {
   useTranslation();
   const [loading, setLoading] = useState(true);
+  const user = useFarm((state) => state.user);
+  const [startupError, setStartupError] = useState('');
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setStartupError('');
     restoreOfflineAccount()
       .then(() => api('/auth/me'))
-      .then((r) => useFarm.getState().setUser(r.user))
-      .catch(() => {})
-      .finally(() => setLoading(false));
-    const expired = () => useFarm.setState({ user: null, farm: null, farms: [] });
+      .then((r) => { if (active) useFarm.getState().setUser(r.user); })
+      .catch((e) => {
+        if (active && !(e instanceof ApiError && e.status === 401)) setStartupError(e.message);
+      })
+      .finally(() => { if (active) setLoading(false); });
+    const expired = () => useFarm.getState().setUser(null);
     window.addEventListener('agritwin:session-expired', expired);
-    return () => window.removeEventListener('agritwin:session-expired', expired);
-  }, []);
+    return () => { active = false; window.removeEventListener('agritwin:session-expired', expired); };
+  }, [attempt]);
   if (loading)
     return (
       <div className="loading-screen">
@@ -69,11 +77,18 @@ export default function App() {
         <p>{t('Loading…')}</p>
       </div>
     );
+  if (startupError) return (
+    <div className="loading-screen">
+      <h1>{t('Could not connect')}</h1>
+      <p role="alert">{t('Your session could not be checked. Please reconnect and try again.')}</p>
+      <Button onClick={() => setAttempt(attempt + 1)}>{t('Try again')}</Button>
+    </div>
+  );
   return (
     <Routes>
-      <Route path="/" element={<Landing />} />
-      <Route path="/login" element={<Auth />} />
-      <Route path="/register" element={<Auth register />} />
+      <Route path="/" element={user ? <Navigate to="/app" replace /> : <Landing />} />
+      <Route path="/login" element={user ? <Navigate to="/app" replace /> : <Auth />} />
+      <Route path="/register" element={user ? <Navigate to="/app" replace /> : <Auth register />} />
       <Route path="/app/*" element={<Shell />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
@@ -85,17 +100,21 @@ function Shell() {
     [error, setError] = useState(''),
     [menu, setMenu] = useState(false),
     [storage, setStorage] = useState(''),
+    [loadFailed, setLoadFailed] = useState(false),
+    [loadAttempt, setLoadAttempt] = useState(0),
     location = useLocation();
   useEffect(() => {
     if (user) {
+      setLoading(true);
+      setLoadFailed(false);
       load()
-        .catch((e) => setError(e.message))
+        .catch((e) => { setError(e.message); setLoadFailed(true); })
         .finally(() => setLoading(false));
       api('/health')
         .then((r) => setStorage(r.storage))
         .catch(() => {});
     }
-  }, [user?.id]);
+  }, [user?.id, loadAttempt]);
   useEffect(() => {
     setMenu(false);
   }, [location.pathname]);
@@ -106,7 +125,7 @@ function Shell() {
     socket.on('connect', () => {
       setOnline(true);
       socket.emit('farm:join', id);
-      open(id).catch((e) => setError(e.message));
+      open(id, true).catch((e) => setError(e.message));
     });
     socket.on('disconnect', () => setOnline(false));
     socket.on('connect_error', () => setOnline(false));
@@ -116,11 +135,11 @@ function Shell() {
         current?.id === id &&
         (current.run.id !== data.runId || data.version >= current.run.version)
       )
-        open(id).catch((e) => setError(e.message));
+        open(id, true).catch((e) => setError(e.message));
     });
     socket.on('simulation:error', (e) => {
       setError(e.message);
-      open(id).catch(() => {});
+      open(id, true).catch(() => {});
     });
     socket.on('farm:deleted', () => load().catch((e) => setError(e.message)));
     return () => {
@@ -167,17 +186,17 @@ function Shell() {
             className="user-block"
             onClick={async () => {
               try {
-                const saved = await offlineData();
+                const saved = await offlineData().catch(() => undefined);
                 if (
                   saved?.drafts.length &&
                   !window.confirm(t('Unsynced drafts will be removed from this device. Continue?'))
                 )
                   return;
                 await post('/auth/logout', {});
-                await clearOffline();
+                await clearOffline().catch(() => {});
                 await lockOffline();
-                await firebaseLogout();
-                useFarm.setState({ user: null, farm: null, farms: [] });
+                useFarm.getState().setUser(null);
+                await firebaseLogout().catch(() => {});
               } catch (e) {
                 setError((e as Error).message);
               }
@@ -214,7 +233,7 @@ function Shell() {
           <div className="topbar-right">
             <span className={`connection ${online ? 'connected' : ''}`}>
               <span className="status-dot" />
-              {t(online ? 'Connected' : 'Offline')}
+              {t(online ? 'Connected' : 'Live updates paused')}
             </span>
             <LanguageSelect />
             {farm && (
@@ -247,6 +266,11 @@ function Shell() {
             <div className="empty">
               <p>{t('Loading…')}</p>
             </div>
+          ) : loadFailed ? (
+            <div className="empty card">
+              <h1>{t('Could not load your farms')}</h1>
+              <Button onClick={() => { setError(''); setLoadAttempt(loadAttempt + 1); }}>{t('Try again')}</Button>
+            </div>
           ) : noFarm ? (
             <div className="empty card">
               <MapPinned size={38} />
@@ -260,7 +284,7 @@ function Shell() {
             </div>
           ) : (
             <Suspense fallback={<div className="empty">Loading workspace…</div>}>
-              <Routes>
+              <Routes key={farm?.id || 'no-farm'}>
                 <Route index element={<Twin />} />
                 <Route path="farms" element={<Farms />} />
                 <Route path="diary" element={<Diary />} />

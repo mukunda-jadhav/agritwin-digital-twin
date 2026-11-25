@@ -331,6 +331,14 @@ export function Twin({ expanded = false }: { expanded?: boolean }) {
                 <SkipForward size={15} />
                 {t('Advance 1 day')}
               </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={busy || replay >= 0 || season.blocked}
+                onClick={() => control('step', 30)}
+              >
+                {t('Advance 30 days')}
+              </Button>
               {advanced && (
                 <Button
                   variant="ghost"
@@ -343,22 +351,21 @@ export function Twin({ expanded = false }: { expanded?: boolean }) {
               )}
             </div>
             <div className="inline">
-              {advanced && (
                 <label className="speed-label">
                   {t('Speed')}
                   <select
                     aria-label="Simulation speed"
                     value={farm.run.speed}
-                    disabled={busy}
+                    disabled={busy || replay >= 0}
                     onChange={(e) => control('speed', 1, Number(e.target.value))}
                   >
                     <option value={1}>1×</option>
                     <option value={3}>3×</option>
                     <option value={7}>7×</option>
                     <option value={10}>10×</option>
+                    <option value={30}>30×</option>
                   </select>
                 </label>
-              )}
               <Button
                 variant="ghost"
                 size="sm"
@@ -370,6 +377,7 @@ export function Twin({ expanded = false }: { expanded?: boolean }) {
               </Button>
             </div>
           </div>
+          <p className="muted">{t('Speed sets simulated days per update (about every 3 seconds). Daily calculations are preserved; growth pauses at maturity.')}</p>
           {reset && (
             <div className="notice">
               <div>

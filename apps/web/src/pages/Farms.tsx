@@ -11,7 +11,9 @@ import { googleConfigured, googleLogin } from '../services/firebase';
 import { toAcres } from '../utils/landArea';
 export function Farms() {
   const { farms, open } = useFarm(),
-    navigate = useNavigate();
+    navigate = useNavigate(),
+    [error, setError] = useState(''),
+    [opening, setOpening] = useState('');
   return (
     <>
       <div className="page-heading">
@@ -25,6 +27,7 @@ export function Farms() {
           </Link>
         </Button>
       </div>
+      {error && <p className="error" role="alert">{t(error)}</p>}
       <div className="farms-grid">
         {farms.map((f) => (
           <article className="card farm-card" key={f.id}>
@@ -49,12 +52,16 @@ export function Farms() {
               </div>
               <Button
                 variant="outline"
+                disabled={Boolean(opening)}
                 onClick={async () => {
-                  await open(f.id);
-                  navigate('/app');
+                  setOpening(f.id);
+                  setError('');
+                  try { await open(f.id); navigate('/app'); }
+                  catch (e) { setError((e as Error).message); }
+                  finally { setOpening(''); }
                 }}
               >
-                {t('Open digital farm')}
+                {t(opening === f.id ? 'Loading…' : 'Open digital farm')}
                 <ArrowUpRight size={16} />
               </Button>
             </div>

@@ -293,11 +293,14 @@ export function Insights() {
     [predictions, setPredictions] = useState<Prediction[]>([]),
     [error, setError] = useState('');
   useEffect(() => {
-    if (farm)
-      api<Prediction[]>(`/farms/${farm.id}/predictions`)
-        .then(setPredictions)
-        .catch((e) => setError(e.message));
-  }, [farm?.id, farm?.run.version]);
+    let active = true;
+    setPredictions([]);
+    setError('');
+    if (farm) api<Prediction[]>(`/farms/${farm.id}/predictions`)
+      .then((value) => { if (active) setPredictions(value); })
+      .catch((e) => { if (active) setError(e.message); });
+    return () => { active = false; };
+  }, [farm?.id, farm?.run.id, farm?.run.version]);
   if (!farm) return <SeasonGuide />;
   return (
     <>

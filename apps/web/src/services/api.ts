@@ -7,6 +7,9 @@ import {
   setOfflineAccount,
 } from './offline';
 export const API = import.meta.env.VITE_API_URL || '';
+export class ApiError extends Error {
+  constructor(public status: number, message: string) { super(message); }
+}
 export class NetworkUnavailable extends Error {
   constructor() {
     super('Internet is unavailable. Saved farms and diary drafts are available offline.');
@@ -31,17 +34,17 @@ export async function api<T = any>(path: string, options: RequestInit = {}): Pro
     }
     throw new NetworkUnavailable();
   }
-  const data = await res
-    .json()
-    .catch(() => ({ error: 'The server is temporarily unavailable. Please try again.' }));
+  const data = await res.json().catch(() => {
+    throw new ApiError(res.status, 'The server is temporarily unavailable. Please try again.');
+  });
   if (res.status === 401 && (path === '/auth/me' || !path.startsWith('/auth/'))) {
     await lockOffline();
     window.dispatchEvent(new Event('agritwin:session-expired'));
   }
-  if (!res.ok) throw new Error(data.error || 'Request failed');
+  if (!res.ok) throw new ApiError(res.status, data.error || 'Request failed');
   if (path.startsWith('/auth/') && data.user?.id) await setOfflineAccount(data.user.id);
   if (isRead) await cacheResponse(path, data).catch(warnOffline);
-  if (!isRead && /^\/farms\/[^/]+\//.test(path) && data.ownerId)
+  if (!isRead && /^\/farms(?:\/[^/]+.*)?$/.test(path) && data.ownerId)
     await cacheResponse(`/farms/${data.id}`, data).catch(warnOffline);
   if (path === '/auth/me') markOffline(false);
   return data;

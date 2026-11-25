@@ -16,6 +16,8 @@ export function CropHealth() {
     if (!farm) return;
     let active = true;
     setLoading(true);
+    setReports([]);
+    setError('');
     api<{ plots: PlotThreatReport[] }>(`/farms/${farm.id}/threats`)
       .then((r) => {
         if (active) {
@@ -28,7 +30,7 @@ export function CropHealth() {
     return () => {
       active = false;
     };
-  }, [farm?.id, farm?.run.version]);
+  }, [farm?.id, farm?.run.id, farm?.run.version]);
   if (!farm) return null;
   const plot = farm.plots.find((p) => p.id === selected) || farm.plots[0],
     report = reports.find((r) => r.plotId === plot.id),

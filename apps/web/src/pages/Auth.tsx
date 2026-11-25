@@ -15,8 +15,9 @@ import { googleConfigured, googleLogin, finishGoogleRedirect } from '../services
 import { useFarm } from '../stores/useFarm';
 import { t } from '../i18n';
 export function Brand() {
+  const user = useFarm((state) => state.user);
   return (
-    <Link className="brand" to="/">
+    <Link className="brand" to={user ? '/app' : '/'} aria-label={t('AgriTwin home')}>
       <span className="brand-symbol">
         <Layers3 size={23} />
       </span>

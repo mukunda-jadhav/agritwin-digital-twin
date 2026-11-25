@@ -2857,7 +2857,7 @@ textarea:focus-visible {
   min-height: 44px;
 }
 .timeline-controls select {
-  width: 76px;
+  width: 125px;
   margin: 0;
 }
 .timeline-controls .button {

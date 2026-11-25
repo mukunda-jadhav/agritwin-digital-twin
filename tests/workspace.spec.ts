@@ -209,12 +209,19 @@ test('field workspace, replay, notebook and scenario comparison', async ({ page 
   await page.goto('http://127.0.0.1:5179/app');
   await page.getByRole('heading', { name: 'Green Valley Farm' }).waitFor();
   await page.locator('canvas').waitFor();
-  const speedRequest = page.waitForRequest(r => r.url().endsWith('/control') && r.method() === 'POST');
-  await page.getByLabel('Simulation speed', { exact: true }).selectOption('30');
-  assert.equal((await speedRequest).postDataJSON().speed, 30);
-  const stepRequest = page.waitForRequest(r => r.url().endsWith('/control') && r.method() === 'POST');
-  await page.getByRole('button', { name: 'Advance 30 days', exact: true }).click();
-  assert.equal((await stepRequest).postDataJSON().days, 30);
+  await page.locator('.field-picker select').first().selectOption('p2');
+  assert.equal(
+    await page
+      .getByRole('button', { name: 'Selected field', exact: true })
+      .getAttribute('aria-pressed'),
+    'true',
+  );
+  await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
+  await page.getByRole('button', { name: 'Zoom out', exact: true }).click();
+  await page.getByRole('button', { name: 'Whole farm', exact: true }).click();
+  await page.getByLabel('Replay speed', { exact: true }).selectOption('0.5');
+  await page.getByLabel('Replay speed', { exact: true }).selectOption('4');
+  await page.locator('.field-picker select').first().selectOption('p1');
   await page.getByRole('button', { name: 'Ask about my crop', exact: false }).click();
   await page.getByText('Basic guide · AI not connected', { exact: true }).waitFor();
   await page.getByRole('button', { name: 'Does my crop need water?', exact: true }).click();

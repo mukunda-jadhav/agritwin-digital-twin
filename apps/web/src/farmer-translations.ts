@@ -1,12 +1,28 @@
 export const farmerTranslations: Record<string, [string, string]> = {
   'Advance 30 days': ['30 दिन आगे बढ़ाएं', '30 दिवस पुढे जा'],
-  'Speed sets simulated days per update (about every 3 seconds). Daily calculations are preserved; growth pauses at maturity.': ['गति हर अपडेट में बढ़ने वाले दिनों की संख्या है (लगभग हर 3 सेकंड)। रोज की गणना जारी रहती है; फसल पकने पर वृद्धि रुकती है।', 'वेग म्हणजे प्रत्येक अपडेटमधील दिवस (साधारण दर 3 सेकंदांनी)। रोजची गणना कायम राहते; पीक परिपक्व झाल्यावर वाढ थांबते.'],
+  'Speed sets simulated days per update (about every 3 seconds). Daily calculations are preserved; growth pauses at maturity.':
+    [
+      'गति हर अपडेट में बढ़ने वाले दिनों की संख्या है (लगभग हर 3 सेकंड)। रोज की गणना जारी रहती है; फसल पकने पर वृद्धि रुकती है।',
+      'वेग म्हणजे प्रत्येक अपडेटमधील दिवस (साधारण दर 3 सेकंदांनी)। रोजची गणना कायम राहते; पीक परिपक्व झाल्यावर वाढ थांबते.',
+    ],
   'AgriTwin home': ['AgriTwin मुख्य पृष्ठ', 'AgriTwin मुख्यपृष्ठ'],
   'Could not connect': ['कनेक्ट नहीं हो सका', 'जोडणी होऊ शकली नाही'],
-  'Your session could not be checked. Please reconnect and try again.': ['आपका सत्र जाँचा नहीं जा सका। इंटरनेट से जुड़कर फिर कोशिश करें।', 'आपले सत्र तपासता आले नाही. इंटरनेट जोडून पुन्हा प्रयत्न करा.'],
+  'Your session could not be checked. Please reconnect and try again.': [
+    'आपका सत्र जाँचा नहीं जा सका। इंटरनेट से जुड़कर फिर कोशिश करें।',
+    'आपले सत्र तपासता आले नाही. इंटरनेट जोडून पुन्हा प्रयत्न करा.',
+  ],
   'Try again': ['फिर कोशिश करें', 'पुन्हा प्रयत्न करा'],
   'Could not load your farms': ['आपके खेत लोड नहीं हो सके', 'आपली शेती माहिती लोड झाली नाही'],
   'Live updates paused': ['लाइव अपडेट रुके हैं', 'थेट अपडेट थांबले आहेत'],
+  'Selected field': ['चुना हुआ खेत', 'निवडलेले शेत'],
+  'Zoom in': ['पास देखें', 'जवळून पहा'],
+  'Zoom out': ['दूर देखें', 'दुरून पहा'],
+  'Animation speed': ['एनीमेशन की गति', 'अॅनिमेशनचा वेग'],
+  Slow: ['धीमा', 'हळू'],
+  Normal: ['सामान्य', 'सामान्य'],
+  Fast: ['तेज', 'वेगवान'],
+  'Very fast': ['बहुत तेज', 'खूप वेगवान'],
+  'Days per update': ['हर अपडेट में दिन', 'प्रत्येक अपडेटचे दिवस'],
   'Farm diary': ['खेत की डायरी', 'शेतीची दैनंदिनी'],
   'Write what you did. Keep track of what you spent.': [
     'खेत में किए काम और खर्च लिखें।',

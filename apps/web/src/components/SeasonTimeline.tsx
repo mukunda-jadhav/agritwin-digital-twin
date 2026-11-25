@@ -76,15 +76,19 @@ export function SeasonTimeline({
           }}
           aria-valuetext={`${t('Day')} ${snapshot.day}, ${dateLabel(snapshot.date)}`}
         />
-        <select
-          aria-label={t('Replay speed')}
-          value={speed}
-          onChange={(e) => setSpeed(Number(e.target.value))}
-        >
-          <option value={1}>1×</option>
-          <option value={2}>2×</option>
-          <option value={4}>4×</option>
-        </select>
+        <label>
+          {t('Animation speed')}
+          <select
+            aria-label={t('Replay speed')}
+            value={speed}
+            onChange={(e) => setSpeed(Number(e.target.value))}
+          >
+            <option value={0.5}>{t('Slow')}</option>
+            <option value={1}>{t('Normal')}</option>
+            <option value={2}>{t('Fast')}</option>
+            <option value={4}>{t('Very fast')}</option>
+          </select>
+        </label>
         {onCurrent && index >= 0 && (
           <button
             className="button button-outline"

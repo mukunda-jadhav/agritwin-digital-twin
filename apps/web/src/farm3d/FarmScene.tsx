@@ -403,7 +403,9 @@ function Camera({
   view,
   layout,
   selected,
+  zoom,
 }: {
+  zoom?: { step: number; factor: number };
   view: CameraView;
   cameraLink?: CameraLink;
   layout: ReturnType<typeof fieldLayout>;
@@ -424,7 +426,8 @@ function Camera({
       position.current.set(s * 0.68, s * 0.78, s * 0.8);
     } else if (view === 'inspect') {
       target.current.set(f.x, 0, f.z);
-      position.current.set(f.x + f.width * 0.65, f.width * 0.75, f.z + f.depth * 0.6);
+      const span = Math.max(f.width, f.depth) * Math.max(1, viewport.height / viewport.width);
+      position.current.set(f.x + span * 0.65, span * 0.9, f.z + span * 0.8);
     } else {
       const x = f.x - f.width / 2 + 2,
         z = f.z - f.depth / 2 + 3;
@@ -438,6 +441,17 @@ function Camera({
     invalidate();
   }, [view, selected, layout, camera, invalidate, viewport.width, viewport.height]);
   const moving = useRef(true);
+  useEffect(() => {
+    if (!zoom?.step || !controls.current) return;
+    moving.current = false;
+    const offset = camera.position.clone().sub(controls.current.target);
+    offset.setLength(
+      THREE.MathUtils.clamp(offset.length() * zoom.factor, 1.8, layout.extent * 2.4),
+    );
+    camera.position.copy(controls.current.target).add(offset);
+    controls.current.update();
+    invalidate();
+  }, [zoom]);
   const receiving = useRef(false);
   useEffect(() => {
     if (!cameraLink) return;
@@ -474,7 +488,7 @@ function Camera({
       ref={controls}
       makeDefault
       enableDamping
-      enablePan={false}
+      enablePan
       dampingFactor={0.12}
       minDistance={1.8}
       maxDistance={layout.extent * 2.4}
@@ -500,7 +514,9 @@ export default function FarmScene({
   night = false,
   layer = 'natural',
   cameraLink,
+  zoom,
 }: {
+  zoom?: { step: number; factor: number };
   farm: Farm;
   snapshot?: Snapshot;
   selected: string;
@@ -620,7 +636,13 @@ export default function FarmScene({
             />
           ))
         )}
-        <Camera cameraLink={cameraLink} view={view} layout={layout} selected={selected} />
+        <Camera
+          zoom={zoom}
+          cameraLink={cameraLink}
+          view={view}
+          layout={layout}
+          selected={selected}
+        />
       </Canvas>
     </SceneBoundary>
   );

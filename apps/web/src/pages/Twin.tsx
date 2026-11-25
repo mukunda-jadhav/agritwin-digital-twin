@@ -44,7 +44,12 @@ export function Twin({ expanded = false }: { expanded?: boolean }) {
     [layer, setLayer] = useState<FieldLayer>('natural'),
     [soilOpen, setSoilOpen] = useState(false),
     [replay, setReplay] = useState(-1),
-    [reset, setReset] = useState(false);
+    [reset, setReset] = useState(false),
+    [zoom, setZoom] = useState({ step: 0, factor: 1 });
+  function focusPlot(id: string) {
+    select(id);
+    setView('inspect');
+  }
   useEffect(() => {
     setReplay(-1);
     setWeather([]);
@@ -211,7 +216,7 @@ export function Twin({ expanded = false }: { expanded?: boolean }) {
             </div>
             <label className="field-picker">
               {t('Select plot')}
-              <select value={plot.id} onChange={(e) => select(e.target.value)}>
+              <select value={plot.id} onChange={(e) => focusPlot(e.target.value)}>
                 {farm.plots.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.name} · {t(p.crop || 'Tomato')}
@@ -227,6 +232,12 @@ export function Twin({ expanded = false }: { expanded?: boolean }) {
             </span>
           </div>
           <div className="camera-toolbar" role="group" aria-label="Camera views">
+            <button onClick={() => setZoom((z) => ({ step: z.step + 1, factor: 0.75 }))}>
+              {t('Zoom in')}
+            </button>
+            <button onClick={() => setZoom((z) => ({ step: z.step + 1, factor: 1.33 }))}>
+              {t('Zoom out')}
+            </button>
             {(
               [
                 ...(farm.boundary && farm.boundary.length >= 3
@@ -234,6 +245,7 @@ export function Twin({ expanded = false }: { expanded?: boolean }) {
                   : []),
                 { value: 'aerial', label: 'Top view' },
                 { value: 'isometric', label: 'Whole farm' },
+                { value: 'inspect', label: 'Selected field' },
                 { value: 'close', label: 'Crop close-up' },
               ] as const
             ).map((c) => (
@@ -287,7 +299,8 @@ export function Twin({ expanded = false }: { expanded?: boolean }) {
                 farm={farm}
                 snapshot={snap}
                 selected={plot.id}
-                onSelect={select}
+                zoom={zoom}
+                onSelect={focusPlot}
                 view={view}
                 layer={layer}
               />
@@ -331,14 +344,6 @@ export function Twin({ expanded = false }: { expanded?: boolean }) {
                 <SkipForward size={15} />
                 {t('Advance 1 day')}
               </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={busy || replay >= 0 || season.blocked}
-                onClick={() => control('step', 30)}
-              >
-                {t('Advance 30 days')}
-              </Button>
               {advanced && (
                 <Button
                   variant="ghost"
@@ -351,21 +356,25 @@ export function Twin({ expanded = false }: { expanded?: boolean }) {
               )}
             </div>
             <div className="inline">
+              {advanced && (
                 <label className="speed-label">
-                  {t('Speed')}
+                  {t('Days per update')}
                   <select
                     aria-label="Simulation speed"
                     value={farm.run.speed}
                     disabled={busy || replay >= 0}
                     onChange={(e) => control('speed', 1, Number(e.target.value))}
                   >
-                    <option value={1}>1×</option>
-                    <option value={3}>3×</option>
-                    <option value={7}>7×</option>
-                    <option value={10}>10×</option>
-                    <option value={30}>30×</option>
+                    <option value={1}>1</option>
+                    <option value={3}>3</option>
+                    <option value={7}>7</option>
+                    <option value={10}>10</option>
+                    {farm.run.speed > 10 && (
+                      <option value={farm.run.speed}>{farm.run.speed}</option>
+                    )}
                   </select>
                 </label>
+              )}
               <Button
                 variant="ghost"
                 size="sm"
@@ -377,7 +386,6 @@ export function Twin({ expanded = false }: { expanded?: boolean }) {
               </Button>
             </div>
           </div>
-          <p className="muted">{t('Speed sets simulated days per update (about every 3 seconds). Daily calculations are preserved; growth pauses at maturity.')}</p>
           {reset && (
             <div className="notice">
               <div>
@@ -524,7 +532,7 @@ export function Twin({ expanded = false }: { expanded?: boolean }) {
                 return (
                   <button
                     key={p.id}
-                    onClick={() => select(p.id)}
+                    onClick={() => focusPlot(p.id)}
                     className={`plot-card ${selected === p.id ? 'selected' : ''}`}
                     aria-pressed={selected === p.id}
                   >

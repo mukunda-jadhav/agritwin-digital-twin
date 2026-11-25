@@ -37,9 +37,7 @@ export function HarvestNotice({ onRestart }: { onRestart: () => void }) {
           {t(
             season.complete
               ? 'All plots have reached maximum development. Record the remaining harvest, then restart to begin another simulated season.'
-              : season.blocked
-                ? 'Record the mature crop harvest before continuing the other plots. Mature plots will no longer grow or receive scheduled irrigation.'
-                : 'You can record the available crop now. Growth continues until maximum development, when the simulation stops automatically.',
+              : 'Harvest ready fields when you want. Other fields keep growing until their own maturity.',
           )}
         </p>
       </div>

@@ -19,5 +19,6 @@ export function seasonState(run: Run, plots: Plot[]) {
     return remainingYield(s) > 0.000001 || (!s.harvestReviewed && (s.harvestedKg || 0) <= 0);
   });
   const complete = plots.length > 0 && mature.length === plots.length;
-  return { mature, awaitingHarvest, complete, blocked: complete || awaitingHarvest.length > 0 };
+  // A harvest-ready plot must not stop crops with a longer growing season.
+  return { mature, awaitingHarvest, complete, blocked: complete };
 }

@@ -1,4 +1,5 @@
 export const farmerTranslations: Record<string, [string, string]> = {
+  'Harvest ready fields when you want. Other fields keep growing until their own maturity.': ['तैयार खेतों की कटाई दर्ज करें। बाकी खेत अपनी फसल पकने तक बढ़ते रहेंगे।', 'तयार शेतांची कापणी नोंदवा. इतर शेतांतील पिके परिपक्व होईपर्यंत वाढत राहतील.'],
   'Advance 30 days': ['30 दिन आगे बढ़ाएं', '30 दिवस पुढे जा'],
   'Speed sets simulated days per update (about every 3 seconds). Daily calculations are preserved; growth pauses at maturity.':
     [

@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { Farm, Plot } from '@agritwin/shared';
+import { cropFor, seasonState } from '@agritwin/shared';
 import {
   SOILS,
   addDays,
@@ -22,6 +23,43 @@ const plot: Plot = {
   method: 'Drip',
   plantingDate: '2026-01-01',
 };
+test('tomato maturity does not stop sugarcane; all plots pause at their own maturity', () => {
+  const plots: Plot[] = [
+    { ...plot, id: 'tomato', crop: 'Tomato' },
+    { ...plot, id: 'cane', crop: 'Sugarcane' },
+  ];
+  const run = newRun(plots, plot.plantingDate);
+  run.status = 'running';
+  let tomatoAtMaturity: ReturnType<typeof initialState> | undefined;
+  let caneAtTomatoMaturity = 0;
+  for (let day = 1; day <= 600 && !seasonState(run, plots).complete; day++) {
+    const weather = synthetic(addDays(plot.plantingDate, day));
+    weather.temperature = 28;
+    tick(run, plots, weather);
+    const [tomato, cane] = current(run).states;
+    if (tomato.growth >= 1 && !tomatoAtMaturity) {
+      tomatoAtMaturity = { ...tomato };
+      caneAtTomatoMaturity = cane.gdd;
+      assert.ok(cane.growth < 1);
+      assert.equal(run.status, 'running');
+      assert.equal(seasonState(run, plots).blocked, false);
+      assert.ok(seasonState(run, plots).awaitingHarvest.some(p => p.id === 'tomato'));
+    }
+    if (tomatoAtMaturity) {
+      assert.equal(tomato.gdd, tomatoAtMaturity.gdd);
+      assert.equal(tomato.yieldKg, tomatoAtMaturity.yieldKg);
+      assert.equal(tomato.harvestedKg, tomatoAtMaturity.harvestedKg);
+    }
+  }
+  assert.ok(tomatoAtMaturity);
+  assert.ok(current(run).states[1].gdd > caneAtTomatoMaturity);
+  assert.equal(current(run).states[1].gdd, cropFor('Sugarcane').maturityGdd);
+  assert.equal(seasonState(run, plots).complete, true);
+  assert.equal(run.status, 'paused');
+  const days = run.history.length;
+  tick(run, plots, synthetic(addDays(current(run).date, 1)));
+  assert.equal(run.history.length, days);
+});
 test('conserves water under all soils, flooding, heat and prolonged drought', () => {
   for (const soil of ['Loam', 'Sandy', 'Clay'] as const) {
     const p = { ...plot, soil };

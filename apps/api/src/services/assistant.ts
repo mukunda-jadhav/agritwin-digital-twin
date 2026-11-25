@@ -24,8 +24,8 @@ const providerKey = (provider: Provider) =>
   (provider === 'gemini' ? process.env.GEMINI_API_KEY : process.env.OPENAI_API_KEY)?.trim();
 export const assistantMode = () => (providerKey(assistantProvider()) ? 'ai' : 'guide');
 export class AssistantUnavailable extends Error {
-  constructor() {
-    super('The AI service is unavailable. Please try again later.');
+  constructor(public providerStatus?: number) {
+    super(providerStatus === 429 ? 'AI usage limit reached. Please try again later.' : providerStatus === 401 || providerStatus === 403 ? 'AI access was rejected. The service owner needs to check the API key and permissions.' : providerStatus === 404 ? 'The configured AI model is unavailable. The service owner needs to update it.' : 'The AI service is unavailable. Please try again later.');
   }
 }
 export function plotContext(farm: Farm, question: Question) {
@@ -195,7 +195,7 @@ export async function askAssistant(
             }),
           },
         );
-        if (!response.ok) throw new AssistantUnavailable();
+        if (!response.ok) throw new AssistantUnavailable(response.status);
         const data = await response.json();
         const candidate = data.candidates?.[0];
         if (
@@ -243,12 +243,13 @@ export async function askAssistant(
           parallel_tool_calls: false,
         }),
       });
-      if (!response.ok) throw new AssistantUnavailable();
+      if (!response.ok) throw new AssistantUnavailable(response.status);
       const data = await response.json();
       if (data.status && data.status !== 'completed') throw new AssistantUnavailable();
       if (!Array.isArray(data.output)) throw new AssistantUnavailable();
       return data.output as ModelOutput[];
-    } catch {
+    } catch (error) {
+      if (error instanceof AssistantUnavailable) throw error;
       throw new AssistantUnavailable();
     }
   }

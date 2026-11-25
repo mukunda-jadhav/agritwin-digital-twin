@@ -308,3 +308,12 @@ test('provider failures and empty or incomplete replies return a safe error', as
     );
   }
 });
+
+test('provider status survives error handling without exposing provider details', async () => {
+  for (const provider of ['gemini', 'openai'] as const) {
+    const farm = fixture();
+    await assert.rejects(askAssistant(farm, question(farm), {
+      provider, key: 'test', fetcher: async () => Response.json({ error: 'private details' }, { status: 429 }),
+    }), (error: unknown) => error instanceof AssistantUnavailable && error.providerStatus === 429 && !error.message.includes('private details'));
+  }
+});

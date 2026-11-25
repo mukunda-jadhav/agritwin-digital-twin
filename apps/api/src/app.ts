@@ -1,6 +1,7 @@
 import {
   assistantInput,
   assistantMode,
+  assistantProvider,
   askAssistant,
   plotContext,
   AssistantUnavailable,
@@ -672,7 +673,10 @@ export async function createApp(
     try {
       res.json(await askAssistant(farm, question));
     } catch (error) {
-      if (error instanceof AssistantUnavailable) throw new HttpError(503, error.message);
+      if (error instanceof AssistantUnavailable) {
+        log.warn({ provider: assistantProvider(), providerStatus: error.providerStatus || null }, 'AI provider request failed');
+        throw new HttpError(503, error.message);
+      }
       throw error;
     }
   });

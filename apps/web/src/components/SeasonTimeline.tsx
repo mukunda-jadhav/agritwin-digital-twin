@@ -87,6 +87,7 @@ export function SeasonTimeline({
             <option value={1}>{t('Normal')}</option>
             <option value={2}>{t('Fast')}</option>
             <option value={4}>{t('Very fast')}</option>
+            <option value={10}>{t('ultra fast')}</option>
           </select>
         </label>
         {onCurrent && index >= 0 && (
